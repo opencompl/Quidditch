@@ -1,0 +1,48 @@
+iree_compiler_register_plugin(
+        PLUGIN_ID
+        hal_target_quidditch
+        TARGET
+        ::Quidditch
+)
+
+iree_cc_library(
+        NAME
+        Quidditch
+        HDRS
+
+        SRCS
+        "QuidditchTarget.cpp"
+        DEPS
+        IREELLVMCPUTargetDeps
+        IREELinalgTransformDialect
+        LLVMAnalysis
+        LLVMBitReader
+        LLVMBitWriter
+        LLVMCore
+        LLVMLinker
+        LLVMSupport
+        LLVMTargetParser
+        MLIRArmNeonDialect
+        MLIRArmSMEDialect
+        MLIRArmSMEToLLVMIRTranslation
+        MLIRBuiltinToLLVMIRTranslation
+        MLIRIR
+        MLIRLLVMDialect
+        MLIRLLVMToLLVMIRTranslation
+        MLIRPDLDialect
+        MLIRPDLInterpDialect
+        MLIRSupport
+        MLIRTargetLLVMIRExport
+        MLIRTransformDialect
+        iree::compiler::Codegen::Common
+        iree::compiler::Codegen::Dialect::Codegen::IR::IREECodegenDialect
+        iree::compiler::Codegen::LLVMCPU
+        iree::compiler::Codegen::Utils
+        iree::compiler::Dialect::HAL::Target
+        iree::compiler::Dialect::HAL::Target::LLVMLinkerUtils
+        iree::compiler::Dialect::LinalgExt::IR
+        iree::compiler::Dialect::Util::IR
+        iree::compiler::PluginAPI
+        iree::compiler::Utils
+        PUBLIC
+)
