@@ -1,0 +1,106 @@
+name: Runtime Build
+
+permissions:
+  contents: read
+  actions: write
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+jobs:
+  build-compiler:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install minimum required cmake and ninja
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: 3.20
+
+      - name: Install CCache
+        uses: Chocobo1/setup-ccache-action@v1
+        with:
+          ccache_options: |
+            max_size=250M
+            compiler_check=none
+
+      - name: Install Compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install lld clang
+
+      - name: Configure
+        run: |
+          cmake -G Ninja -Bquidditch-compiler-build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DIREE_ENABLE_ASSERTIONS=ON \
+          -DIREE_ENABLE_LLD=ON \
+          -DPython3_ROOT_DIR="$pythonLocation" \
+          -DPython3_FIND_STRATEGY=LOCATION \
+          -S ${{github.workspace}}/codegen
+
+      - name: Build
+        run: cmake --build quidditch-compiler-build iree-compile
+
+      # TODO: Test?
+
+      - name: Upload iree-compile
+        uses: actions/upload-artifact@v4
+        with:
+          name: quidditch-compiler-build-dir
+          path: ${{github.workspace}}/quidditch-compiler-build
+
+  build-runtime:
+    runs-on: ubuntu-20.04
+    needs: [ build-compiler ]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Download Pulp Toolchain
+        run: |
+          mkdir ./toolchain
+          wget -qO- https://github.com/pulp-platform/llvm-project/releases/download/0.12.0/riscv32-pulp-llvm-ubuntu2004-0.12.0.tar.gz \
+          | tar --strip-components=1 -xzv -C ./toolchain
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install Python dependencies
+        run: python -m pip install -r runtime/requirements.txt
+
+      - name: Install minimum required cmake and ninja
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: 3.20
+
+      - name: Download iree-compile
+        uses: actions/download-artifact@v4
+        with:
+          name: quidditch-compiler-build-dir
+
+      - name: Configure build
+        run: |
+          cmake -GNinja -Bquidditch-runtime-build \
+          -DQUIDDITCH_CODEGEN_BUILD_DIR=${{github.workspace}}/quidditch-compiler-build \
+          -DPULP_TOOLCHAIN_ROOT=${{github.workspace}}/toolchain \
+          -S ${{github.workspace}}/runtime
