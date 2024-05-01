@@ -55,7 +55,7 @@ jobs:
           -S ${{github.workspace}}/codegen
 
       - name: Build
-        run: cmake --build quidditch-compiler-build iree-compile
+        run: cmake --build quidditch-compiler-build --target iree-compile
 
       # TODO: Test?
 
