@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.20)
 project(QuidditchRuntime LANGUAGES C ASM)
 
 set(IREE_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../iree" CACHE STRING "IREE source code path")
+set(QUIDDITCH_CODEGEN_BUILD_DIR "" CACHE STRING "CMake generation directory with a compiled 'iree-compile'")
+
+list(APPEND CMAKE_MODULE_PATH
+        ${CMAKE_CURRENT_LIST_DIR}/cmake/
+)
 
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions> $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>)
 

@@ -7,6 +7,8 @@
 #include <iree/modules/hal/types.h>
 #include <iree/vm/instance.h>
 
+#include <simple_add.h>
+#include <simple_add_module.h>
 #include <team_decls.h>
 
 static iree_status_t setup_instance_and_device(
@@ -21,7 +23,8 @@ static iree_status_t setup_instance_and_device(
   iree_status_t result = iree_hal_module_register_all_types(*out_instance);
   if (!iree_status_is_ok(result)) goto error_release_vm;
 
-  const iree_hal_executable_library_query_fn_t libraries[] = {};
+  const iree_hal_executable_library_query_fn_t libraries[] = {
+      add_dispatch_0_library_query};
 
   iree_hal_executable_loader_t* loader;
   result = iree_hal_static_library_loader_create(
@@ -51,9 +54,15 @@ error_release_vm:
   return result;
 }
 
+static float data[128];
+
 int main() {
   // TODO: Remove/redirect compute cores once implemented.
   if (!snrt_is_dm_core()) return 0;
+
+  for (int i = 0; i < 128; i++) {
+    data[i] = i;
+  }
 
   iree_allocator_t host_allocator = iree_allocator_system();
 
@@ -76,17 +85,64 @@ int main() {
                              host_allocator, &hal_module);
   if (!iree_status_is_ok(result)) goto error_release_instance_and_device;
 
-  iree_vm_module_t* modules[] = {hal_module};
+  iree_vm_module_t* mlir_module = NULL;
+  result = test_simple_add_create(vmInstance, host_allocator, &mlir_module);
+  if (!iree_status_is_ok(result)) goto error_release_hal_module;
+
+  iree_vm_module_t* modules[] = {hal_module, mlir_module};
 
   iree_vm_context_t* context;
   result = iree_vm_context_create_with_modules(
       vmInstance, IREE_VM_CONTEXT_FLAG_NONE, IREE_ARRAYSIZE(modules), modules,
       host_allocator, &context);
-  if (!iree_status_is_ok(result)) goto error_release_hal_module;
+  if (!iree_status_is_ok(result)) goto error_release_mlir_module;
 
-  // TODO: Run modules.
+  iree_const_byte_span_t span = iree_make_const_byte_span(data, sizeof(data));
 
+  iree_hal_buffer_params_t params = {
+      .usage = IREE_HAL_BUFFER_USAGE_DISPATCH_STORAGE,
+      .access = IREE_HAL_MEMORY_ACCESS_NONE,
+      .type = IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL,
+  };
+  iree_hal_buffer_params_canonicalize(&params);
+
+  iree_hal_buffer_view_t* buffer = NULL;
+  result = iree_hal_buffer_view_allocate_buffer_copy(
+      device, iree_hal_device_allocator(device), 1, (iree_hal_dim_t[]){128},
+      IREE_HAL_ELEMENT_TYPE_FLOAT_32, IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
+      params, span, &buffer);
+  if (!iree_status_is_ok(result)) goto error_release_context;
+
+  iree_vm_list_t* inputs = NULL;
+  result = iree_vm_list_create(
+      /*element_type=*/iree_vm_make_undefined_type_def(),
+      /*initial_capacity=*/2, iree_allocator_system(), &inputs);
+  if (!iree_status_is_ok(result)) goto error_release_context;
+
+  iree_vm_ref_t arg_buffer_view_ref;
+  arg_buffer_view_ref = iree_hal_buffer_view_move_ref(buffer);
+  result = iree_vm_list_push_ref_retain(inputs, &arg_buffer_view_ref);
+  if (!iree_status_is_ok(result)) goto error_release_context;
+
+  result = iree_vm_list_push_ref_move(inputs, &arg_buffer_view_ref);
+  if (!iree_status_is_ok(result)) goto error_release_context;
+
+  iree_vm_function_t main_function;
+  IREE_CHECK_OK(iree_vm_context_resolve_function(
+      context, iree_make_cstring_view("test_simple_add.add"), &main_function));
+
+  iree_vm_list_t* outputs = NULL;
+  IREE_CHECK_OK(iree_vm_list_create(
+      /*element_type=*/iree_vm_make_undefined_type_def(),
+      /*initial_capacity=*/1, iree_allocator_system(), &outputs));
+  IREE_CHECK_OK(iree_vm_invoke(
+      context, main_function, IREE_VM_CONTEXT_FLAG_NONE,
+      /*policy=*/NULL, inputs, outputs, iree_allocator_system()));
+
+error_release_context:
   iree_vm_context_release(context);
+error_release_mlir_module:
+  iree_vm_module_release(mlir_module);
 error_release_hal_module:
   iree_vm_module_release(hal_module);
 
