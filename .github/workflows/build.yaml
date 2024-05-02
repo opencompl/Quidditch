@@ -11,7 +11,7 @@ on:
 
 jobs:
   build-compiler:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v4
@@ -50,6 +50,10 @@ jobs:
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DIREE_ENABLE_ASSERTIONS=ON \
           -DIREE_ENABLE_LLD=ON \
+          -DIREE_ENABLE_THIN_ARCHIVES=ON \
+          -DIREE_HAL_DRIVER_DEFAULTS=OFF \
+          -DIREE_TARGET_BACKEND_DEFAULTS=OFF \
+          -DIREE_TARGET_BACKEND_LLVM_CPU=ON \
           -DPython3_ROOT_DIR="$pythonLocation" \
           -DPython3_FIND_STRATEGY=LOCATION \
           -S ${{github.workspace}}/codegen
@@ -59,6 +63,11 @@ jobs:
 
       # TODO: Test?
 
+      - name: Remove object files prior to upload
+        working-directory: ${{github.workspace}}/quidditch-compiler-build
+        run: |
+          rm **/*.o
+
       - name: Upload iree-compile
         uses: actions/upload-artifact@v4
         with:
@@ -66,7 +75,7 @@ jobs:
           path: ${{github.workspace}}/quidditch-compiler-build
 
   build-runtime:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [ build-compiler ]
 
     steps:
