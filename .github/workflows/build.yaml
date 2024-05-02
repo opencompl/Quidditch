@@ -69,8 +69,9 @@ jobs:
           find . -name "*.o" -type f -delete
 
       - name: Tar build directory
+        working-directory: ${{github.workspace}}
         run: |
-          tar -cvf quidditch-compiler-build.tar ${{github.workspace}}/quidditch-compiler-build
+          tar -cvf quidditch-compiler-build.tar quidditch-compiler-build
 
       - name: Upload iree-compile
         uses: actions/upload-artifact@v4
@@ -119,7 +120,7 @@ jobs:
 
       - name: Untar iree-compile
         run: |
-          tar -xf quidditch-compiler-build.tar
+          tar -xf quidditch-compiler-build.tar .
 
       - name: Configure build
         run: |
