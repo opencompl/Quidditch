@@ -112,6 +112,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: quidditch-compiler-build-dir
+          path: ${{github.workspace}}/quidditch-compiler-build
 
       - name: Configure build
         run: |
