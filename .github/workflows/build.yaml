@@ -68,11 +68,15 @@ jobs:
         run: |
           find . -name "*.o" -type f -delete
 
+      - name: Tar build directory
+        run: |
+          tar -cvf quidditch-compiler-build.tar ${{github.workspace}}/quidditch-compiler-build
+
       - name: Upload iree-compile
         uses: actions/upload-artifact@v4
         with:
           name: quidditch-compiler-build-dir
-          path: ${{github.workspace}}/quidditch-compiler-build
+          path: quidditch-compiler-build.tar
 
   build-runtime:
     runs-on: ubuntu-22.04
@@ -112,7 +116,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: quidditch-compiler-build-dir
-          path: ${{github.workspace}}/quidditch-compiler-build
+          path: quidditch-compiler-build.tar
+
+      - name: Untar iree-compile
+        run: |
+          tar -xzv quidditch-compiler-build.tar
 
       - name: Configure build
         run: |
