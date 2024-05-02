@@ -119,7 +119,7 @@ jobs:
 
       - name: Untar iree-compile
         run: |
-          tar -cvf quidditch-compiler-build.tar
+          tar -xf quidditch-compiler-build.tar
 
       - name: Configure build
         run: |
