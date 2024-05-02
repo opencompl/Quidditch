@@ -66,7 +66,7 @@ jobs:
       - name: Remove object files prior to upload
         working-directory: ${{github.workspace}}/quidditch-compiler-build
         run: |
-          rm **/*.o
+          find . -name "*.o" -type f -delete
 
       - name: Upload iree-compile
         uses: actions/upload-artifact@v4
