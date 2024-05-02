@@ -93,6 +93,12 @@ jobs:
         with:
           cmakeVersion: "~3.21.0"
 
+      - name: Install bender
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: bender
+          version: '~0.28.0'
+
       - name: Download iree-compile
         uses: actions/download-artifact@v4
         with:
