@@ -32,7 +32,7 @@ jobs:
         uses: Chocobo1/setup-ccache-action@v1
         with:
           ccache_options: |
-            max_size=250M
+            max_size=400M
             compiler_check=none
 
       - name: Install Compiler
@@ -119,3 +119,8 @@ jobs:
           -DQUIDDITCH_CODEGEN_BUILD_DIR=${{github.workspace}}/quidditch-compiler-build \
           -DPULP_TOOLCHAIN_ROOT=${{github.workspace}}/toolchain \
           -S ${{github.workspace}}/runtime
+
+      - name: Build
+        run: cmake --build quidditch-runtime-build
+
+      # TODO: Test
