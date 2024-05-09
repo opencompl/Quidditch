@@ -11,8 +11,9 @@ ARG PICOLIBC_VERSION=1.8.6
 ARG SNITCH_CLUSTER_SHA=e02cc9e3f24b92d4607455d5345caba3eb6273b2
 ARG VERILATOR_RELEASE=v4.228
 ARG BENDER_RELEASE=0.27.1
+ARG PRESERVE_SOURCE=false
 
-ENV INSTALL_DIR=/opt/
+ENV INSTALL_DIR=/opt
 ENV CCACHE_DIR=/ccache
 
 WORKDIR $INSTALL_DIR
@@ -65,7 +66,7 @@ RUN cd llvm-project/llvm/build && rm -rf * && \
          -DLLVM_BUILD_STATIC=ON  \
          -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
          -C  /root/phase2.cmake && \
-        ninja install
+        ninja install/strip
 RUN rm -rf llvm-project/llvm/build
 
 RUN cargo install bender --locked --version $BENDER_RELEASE
@@ -87,6 +88,13 @@ RUN cd ./snitch_cluster/target/snitch_cluster && \
     make bin/snitch_cluster.vlt -j$(nproc)
 
 RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/
+RUN strip $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt
 RUN rm -rf ./snitch_cluster/target/snitch_cluster/bin  \
     ./snitch_cluster/target/snitch_cluster/generated  \
-    ./snitch_cluster/target/snitch_cluster/work-vlt
+    ./snitch_cluster/target/snitch_cluster/work-vlt \
+    /ccache
+
+RUN $PRESERVE_SOURCE || rm -rf $INSTALL_DIR/verilator  \
+    $INSTALL_DIR/llvm-project  \
+    $INSTALL_DIR/snitch-cluster \
+    $INSTALL_DIR/picolibc
