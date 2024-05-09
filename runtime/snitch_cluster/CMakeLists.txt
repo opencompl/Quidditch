@@ -8,7 +8,7 @@ set(SNITCH_RUNTIME_TARGET "rtl" CACHE STRING "Snitch runtime target to use (one 
 set(snRuntimeSrc ${SNITCH_CLUSTER_SOURCE_DIR})
 set(header_dir ${CMAKE_CURRENT_BINARY_DIR}/cluster_gen)
 set(config_file ${snRuntimeSrc}/target/snitch_cluster/cfg/default.hjson)
-set(runtime_dir ${snRuntimeSrc}/target/snitch_cluster/sw/runtime/${SNITCH_RUNTIME_TARGET})
+set(runtime_dir ${CMAKE_CURRENT_LIST_DIR}/${SNITCH_RUNTIME_TARGET})
 
 execute_process(COMMAND ${bender_path} path register_interface
     OUTPUT_VARIABLE reggen_base_path
@@ -45,6 +45,7 @@ run_cluster_gen(${snRuntimeSrc}/target/snitch_cluster/sw/runtime/common/snitch_c
 add_library(snRuntime
     ${runtime_dir}/src/snitch_cluster_start.S
     ${runtime_dir}/src/snrt.c
+    ${runtime_dir}/src/syscalls.c
 )
 target_include_directories(snRuntime PRIVATE
     ${snRuntimeSrc}/target/snitch_cluster/sw/runtime/common/
@@ -62,3 +63,5 @@ target_link_directories(snRuntime
     ${snRuntimeSrc}/sw/snRuntime
     ${runtime_dir}
 )
+# Required while snRuntime uses 'inline' qualifiers for declarations.
+target_compile_options(snRuntime PUBLIC -Wno-undefined-inline)

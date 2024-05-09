@@ -17,3 +17,17 @@ target_link_libraries(
     simple_add_module
 )
 
+add_executable(IREE_LocalSyncBaseline local_sync.c)
+target_link_libraries(
+    IREE_LocalSyncBaseline
+    PRIVATE
+    snRuntime
+    iree::base
+    iree::vm
+    iree::modules::hal
+    iree::modules::hal::types
+    iree::hal::drivers::local_sync::sync_driver
+    iree::hal::local::local
+    iree::hal::local::loaders::static_library_loader
+    simple_add_module
+)

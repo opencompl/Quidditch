@@ -88,11 +88,12 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Download Pulp Toolchain
+      - name: Download Quidditch Toolchain
         run: |
           mkdir ./toolchain
-          wget -qO- https://github.com/pulp-platform/llvm-project/releases/download/0.12.0/riscv32-pulp-llvm-ubuntu2004-0.12.0.tar.gz \
-          | tar --strip-components=1 -xzv -C ./toolchain
+          # TODO: This should use main instead before landing.
+          docker run --rm ghcr.io/opencompl/Quidditch/toolchain:${{ github.ref_name }} tar -cC /opt/quidditch-toolchain . \
+          | tar -xC ./toolchain
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -126,10 +127,14 @@ jobs:
         run: |
           cmake -GNinja -Bquidditch-runtime-build \
           -DQUIDDITCH_CODEGEN_BUILD_DIR=${{github.workspace}}/quidditch-compiler-build \
-          -DPULP_TOOLCHAIN_ROOT=${{github.workspace}}/toolchain \
+          -DQUIDDITCH_TOOLCHAIN_ROOT=${{github.workspace}}/toolchain \
+          -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/runtime/ToolchainFile.cmake
           -S ${{github.workspace}}/runtime
 
       - name: Build
         run: cmake --build quidditch-runtime-build
 
-      # TODO: Test
+      - name: Test
+        working-directory: ${{github.workspace}}/quidditch-runtime-build
+        # TODO: This should run a proper test suite once we are no longer using verilator.
+        run: ctest --extra-verbose -j$(nproc) -R HelloWorld

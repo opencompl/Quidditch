@@ -22,3 +22,6 @@ add_subdirectory(iree-configuration)
 add_subdirectory(snitch_cluster EXCLUDE_FROM_ALL SYSTEM)
 
 add_subdirectory(samples)
+
+enable_testing()
+add_subdirectory(tests)
