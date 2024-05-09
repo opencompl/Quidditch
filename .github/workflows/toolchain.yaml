@@ -1,5 +1,6 @@
 name: Build Docker toolchain image
 on:
+  pull_request:
   push:
     paths:
       - runtime/toolchain/**
@@ -41,4 +42,4 @@ jobs:
           context: ${{github.workspace}}/runtime/toolchain/
           file: ${{github.workspace}}/runtime/toolchain/Dockerfile
           push: true
-          tags: ghcr.io/opencompl/quidditch/toolchain:${{ github.ref_name }}
+          tags: ghcr.io/opencompl/quidditch/toolchain:${{ github.head_ref || github.ref_name }}

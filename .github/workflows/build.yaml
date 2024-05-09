@@ -127,8 +127,7 @@ jobs:
         run: |
           cmake -GNinja -Bquidditch-runtime-build \
           -DQUIDDITCH_CODEGEN_BUILD_DIR=${{github.workspace}}/quidditch-compiler-build \
-          -DQUIDDITCH_TOOLCHAIN_ROOT=${{github.workspace}}/toolchain \
-          -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/runtime/ToolchainFile.cmake
+          -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/toolchain/ToolchainFile.cmake
           -S ${{github.workspace}}/runtime
 
       - name: Build

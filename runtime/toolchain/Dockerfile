@@ -105,14 +105,10 @@ RUN cd ./snitch_cluster/target/snitch_cluster && \
 RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
 RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/
 RUN strip $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt
-RUN rm -rf ./snitch_cluster/target/snitch_cluster/bin  \
-    ./snitch_cluster/target/snitch_cluster/generated  \
-    ./snitch_cluster/target/snitch_cluster/work-vlt \
-    /ccache
 
 FROM alpine:3.18
 
 ARG INSTALL_DIR
 
 COPY --from=toolchain-build $INSTALL_DIR/quidditch-toolchain $INSTALL_DIR/quidditch-toolchain
-COPY --from=verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain
+COPY --from=verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin
