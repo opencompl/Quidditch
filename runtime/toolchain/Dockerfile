@@ -1,19 +1,22 @@
-# Distro specific code starts here:
-FROM alpine:3.18 as portable-toolchain-build
 
-RUN apk update && apk add --no-cache cmake git musl-dev clang clang-dev ccache  \
-    python3 ninja py3-pip patch texinfo help2man meson cargo autoconf flex-dev bison make gcc g++ coreutils dtc gdb
-
-# Distro specific code ends here
-
+# Global args.
 ARG LLVM_VERSION=18
 ARG PICOLIBC_VERSION=1.8.6
 ARG SNITCH_CLUSTER_SHA=e02cc9e3f24b92d4607455d5345caba3eb6273b2
 ARG VERILATOR_RELEASE=v4.228
 ARG BENDER_RELEASE=0.27.1
 ARG PRESERVE_SOURCE=false
+ARG INSTALL_DIR=/opt
 
-ENV INSTALL_DIR=/opt
+FROM alpine:3.18 as toolchain-build
+
+ARG LLVM_VERSION
+ARG PICOLIBC_VERSION
+ARG INSTALL_DIR
+
+RUN apk update && apk add --no-cache cmake git musl-dev clang clang-dev ccache  \
+    python3 ninja py3-pip meson
+
 ENV CCACHE_DIR=/ccache
 
 WORKDIR $INSTALL_DIR
@@ -67,7 +70,19 @@ RUN cd llvm-project/llvm/build && rm -rf * && \
          -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
          -C  /root/phase2.cmake && \
         ninja install/strip
-RUN rm -rf llvm-project/llvm/build
+
+FROM alpine:3.18 as verilator-build
+
+ARG SNITCH_CLUSTER_SHA
+ARG VERILATOR_RELEASE
+ARG BENDER_RELEASE
+ARG INSTALL_DIR
+
+ENV CCACHE_DIR=/ccache
+
+WORKDIR $INSTALL_DIR
+
+RUN apk update && apk add --no-cache py3-pip git ccache cargo autoconf flex-dev bison make gcc g++ coreutils dtc patch
 
 RUN cargo install bender --locked --version $BENDER_RELEASE
 ENV PATH=$PATH:/root/.cargo/bin
@@ -87,6 +102,7 @@ RUN cd ./snitch_cluster && git apply /root/snRuntime-01.patch && git apply /root
 RUN cd ./snitch_cluster/target/snitch_cluster && \
     make bin/snitch_cluster.vlt -j$(nproc)
 
+RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
 RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/
 RUN strip $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt
 RUN rm -rf ./snitch_cluster/target/snitch_cluster/bin  \
@@ -94,7 +110,9 @@ RUN rm -rf ./snitch_cluster/target/snitch_cluster/bin  \
     ./snitch_cluster/target/snitch_cluster/work-vlt \
     /ccache
 
-RUN $PRESERVE_SOURCE || rm -rf $INSTALL_DIR/verilator  \
-    $INSTALL_DIR/llvm-project  \
-    $INSTALL_DIR/snitch-cluster \
-    $INSTALL_DIR/picolibc
+FROM alpine:3.18
+
+ARG INSTALL_DIR
+
+COPY --from=toolchain-build $INSTALL_DIR/quidditch-toolchain $INSTALL_DIR/quidditch-toolchain
+COPY --from=verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain
