@@ -1,7 +1,11 @@
 name: Build Docker toolchain image
 on:
   pull_request:
+    paths:
+      - runtime/toolchain/**
+      - .github/workflows/toolchain.yaml
   push:
+    branches: [ "main" ]
     paths:
       - runtime/toolchain/**
       - .github/workflows/toolchain.yaml
@@ -39,7 +43,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v5.3.0
         with:
-          context: ${{github.workspace}}/runtime/toolchain/
+          context: ${{github.workspace}}/runtime/
           file: ${{github.workspace}}/runtime/toolchain/Dockerfile
           push: true
           tags: ghcr.io/opencompl/quidditch/toolchain:${{ github.head_ref || github.ref_name }}

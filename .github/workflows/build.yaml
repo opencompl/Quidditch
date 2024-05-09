@@ -87,6 +87,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          path: 'Quidditch'
 
       - name: Download Quidditch Toolchain
         run: |
@@ -101,7 +102,7 @@ jobs:
           python-version: 3.11
 
       - name: Install Python dependencies
-        run: python -m pip install -r runtime/requirements.txt
+        run: python -m pip install -r Quidditch/runtime/requirements.txt
 
       - name: Install minimum required cmake and ninja
         uses: lukka/get-cmake@latest
@@ -127,8 +128,8 @@ jobs:
         run: |
           cmake -GNinja -Bquidditch-runtime-build \
           -DQUIDDITCH_CODEGEN_BUILD_DIR=${{github.workspace}}/quidditch-compiler-build \
-          -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/toolchain/ToolchainFile.cmake
-          -S ${{github.workspace}}/runtime
+          -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/toolchain/ToolchainFile.cmake \
+          -S ${{github.workspace}}/Quidditch/runtime
 
       - name: Build
         run: cmake --build quidditch-runtime-build

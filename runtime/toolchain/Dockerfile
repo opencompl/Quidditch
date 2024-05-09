@@ -5,7 +5,6 @@ ARG PICOLIBC_VERSION=1.8.6
 ARG SNITCH_CLUSTER_SHA=e02cc9e3f24b92d4607455d5345caba3eb6273b2
 ARG VERILATOR_RELEASE=v4.228
 ARG BENDER_RELEASE=0.27.1
-ARG PRESERVE_SOURCE=false
 ARG INSTALL_DIR=/opt
 
 FROM alpine:3.18 as toolchain-build
@@ -23,7 +22,7 @@ WORKDIR $INSTALL_DIR
 
 RUN git clone --depth 1  https://github.com/llvm/llvm-project/ -b release/$LLVM_VERSION.x
 
-COPY phase1.cmake /root/
+COPY toolchain/phase1.cmake /root/
 
 RUN mkdir llvm-project/llvm/build && cd llvm-project/llvm/build && \
     cmake .. -GNinja -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR/quidditch-toolchain \
@@ -60,7 +59,7 @@ RUN mkdir picolibc/build && cd picolibc/build &&  \
     -Dprefix=$INSTALL_DIR/quidditch-toolchain  \
     -Dspecsdir=none && ninja install
 
-COPY phase2.cmake /root/
+COPY toolchain/phase2.cmake /root/
 
 RUN cd llvm-project/llvm/build && rm -rf * && \
     cmake .. -GNinja -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR/quidditch-toolchain \
@@ -86,8 +85,8 @@ RUN apk update && apk add --no-cache py3-pip git ccache cargo autoconf flex-dev 
 
 RUN cargo install bender --locked --version $BENDER_RELEASE
 ENV PATH=$PATH:/root/.cargo/bin
-RUN pip install --break-system-packages hjson==3.1.* jsonref==1.1.* mako==1.3.* jsonschema==4.21.* tabulate==0.9.*  \
-    PyYAML==6.0.*
+COPY requirements.txt /root/
+RUN pip install --break-system-packages -r /root/requirements.txt
 RUN git clone https://github.com/pulp-platform/snitch_cluster && \
     cd snitch_cluster && git checkout $SNITCH_CLUSTER_SHA && git submodule update --init --recursive
 
@@ -96,8 +95,8 @@ ENV VERILATOR_ROOT=$INSTALL_DIR/verilator
 RUN git clone --depth 1 https://github.com/verilator/verilator -b $VERILATOR_RELEASE
 RUN cd verilator && autoconf && ./configure && make -j$(nproc)
 ENV VLT=$VERILATOR_ROOT/bin/verilator
-COPY snRuntime-01.patch /root/
-COPY static-verilator-02.patch /root/
+COPY toolchain/snRuntime-01.patch /root/
+COPY toolchain/static-verilator-02.patch /root/
 RUN cd ./snitch_cluster && git apply /root/snRuntime-01.patch && git apply /root/static-verilator-02.patch
 RUN cd ./snitch_cluster/target/snitch_cluster && \
     make bin/snitch_cluster.vlt -j$(nproc)
