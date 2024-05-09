@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - runtime/toolchain/**
+      - .github/workflows/toolchain.yaml
   workflow_dispatch:
 
 

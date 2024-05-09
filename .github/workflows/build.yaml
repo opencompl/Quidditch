@@ -92,7 +92,7 @@ jobs:
         run: |
           mkdir ./toolchain
           # TODO: This should use main instead before landing.
-          docker run --rm ghcr.io/opencompl/Quidditch/toolchain:${{ github.ref_name }} tar -cC /opt/quidditch-toolchain . \
+          docker run --rm ghcr.io/opencompl/quidditch/toolchain:${{ github.ref_name }} tar -cC /opt/quidditch-toolchain . \
           | tar -xC ./toolchain
 
       - name: Set up Python
