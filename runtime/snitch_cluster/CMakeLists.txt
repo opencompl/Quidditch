@@ -1,21 +1,26 @@
 project(snRuntime C ASM)
 
+# Required for running regtool and clustergen.
 find_package(Python3 REQUIRED)
+# Required for finding regtool.
 find_program(bender_path NAMES bender REQUIRED)
 
-set(SNITCH_RUNTIME_TARGET "rtl" CACHE STRING "Snitch runtime target to use (one of banshee or rtl)")
+set(SNITCH_RUNTIME_TARGET "rtl" CACHE STRING "Snitch runtime target to use")
 
 set(snRuntimeSrc ${SNITCH_CLUSTER_SOURCE_DIR})
 set(header_dir ${CMAKE_CURRENT_BINARY_DIR}/cluster_gen)
 set(config_file ${snRuntimeSrc}/target/snitch_cluster/cfg/default.hjson)
 set(runtime_dir ${CMAKE_CURRENT_LIST_DIR}/${SNITCH_RUNTIME_TARGET})
 
+# Get the path of regtool from bender. This will additionally automatically
+# install it.
 execute_process(COMMAND ${bender_path} path register_interface
     OUTPUT_VARIABLE reggen_base_path
     OUTPUT_STRIP_TRAILING_WHITESPACE
     WORKING_DIRECTORY ${snRuntimeSrc})
 set(reggen_path ${reggen_base_path}/vendor/lowrisc_opentitan/util/regtool.py)
 
+# Generate the 'snitch_cluster_peripheral.h' header.
 add_custom_command(OUTPUT "${header_dir}/snitch_cluster_peripheral.h"
     COMMAND ${Python3_EXECUTABLE} ${reggen_path} -D
     -o "${header_dir}/snitch_cluster_peripheral.h"
@@ -27,6 +32,8 @@ add_custom_target(snitch_cluster_peripheral.h DEPENDS "${header_dir}/snitch_clus
 add_custom_target(cluster_gen)
 macro(run_cluster_gen input_file)
   set(filename ${input_file})
+  # Resulting filename is the input file name with the last extension removed.
+  # Usually transforms '*.h.tpl' to '*.h'.
   cmake_path(GET filename FILENAME filename)
   cmake_path(GET filename STEM LAST_ONLY filename)
   add_custom_command(OUTPUT "${header_dir}/${filename}"
@@ -64,4 +71,4 @@ target_link_directories(snRuntime
     ${runtime_dir}
 )
 # Required while snRuntime uses 'inline' qualifiers for declarations.
-target_compile_options(snRuntime PUBLIC -Wno-undefined-inline)
+target_compile_options(snRuntime PRIVATE -Wno-undefined-inline)

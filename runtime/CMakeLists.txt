@@ -17,7 +17,7 @@ add_definitions(-DIREE_PLATFORM_GENERIC)
 add_definitions(-DIREE_USER_CONFIG_H="${CMAKE_CURRENT_LIST_DIR}/iree-configuration/config.h")
 add_subdirectory(iree-configuration)
 
-add_subdirectory(snitch_cluster EXCLUDE_FROM_ALL SYSTEM)
+add_subdirectory(snitch_cluster SYSTEM EXCLUDE_FROM_ALL)
 
 add_subdirectory(samples)
 
