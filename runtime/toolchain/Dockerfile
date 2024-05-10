@@ -78,11 +78,9 @@ ARG VERILATOR_RELEASE
 ARG BENDER_RELEASE
 ARG INSTALL_DIR
 
-ENV CCACHE_DIR=/ccache
-
 WORKDIR $INSTALL_DIR
 
-RUN apk update && apk add --no-cache py3-pip git ccache cargo autoconf flex-dev bison make gcc g++ coreutils dtc patch
+RUN apk update && apk add --no-cache py3-pip git cargo autoconf flex-dev bison make gcc g++ coreutils dtc patch
 
 RUN cargo install bender --locked --version $BENDER_RELEASE
 ENV PATH=$PATH:/root/.cargo/bin
@@ -97,10 +95,9 @@ RUN git clone --depth 1 https://github.com/verilator/verilator -b $VERILATOR_REL
 RUN cd verilator && autoconf && ./configure && make -j$(nproc)
 ENV VLT=$VERILATOR_ROOT/bin/verilator
 COPY toolchain/snRuntime-01.patch /root/
-COPY toolchain/static-verilator-02.patch /root/
-RUN cd ./snitch_cluster && git apply /root/snRuntime-01.patch && git apply /root/static-verilator-02.patch
+RUN cd ./snitch_cluster && git apply /root/snRuntime-01.patch
 RUN cd ./snitch_cluster/target/snitch_cluster && \
-    make bin/snitch_cluster.vlt -j$(nproc)
+    make LDFLAGS=-static bin/snitch_cluster.vlt -j$(nproc)
 
 RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
 RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/
