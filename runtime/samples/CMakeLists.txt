@@ -6,6 +6,7 @@ add_executable(IREE_HelloWorld main.c)
 target_link_libraries(
         IREE_HelloWorld
         PRIVATE
+        snRuntime
         iree::base
         iree::vm
         iree::modules::hal
