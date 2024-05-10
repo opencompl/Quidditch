@@ -1,0 +1,68 @@
+diff --git a/target/common/test/tb_bin.cc b/target/common/test/tb_bin.cc
+index 7aaa138..dd9905a 100644
+--- a/target/common/test/tb_bin.cc
++++ b/target/common/test/tb_bin.cc
+@@ -2,7 +2,7 @@
+ // Solderpad Hardware License, Version 0.51, see LICENSE for details.
+ // SPDX-License-Identifier: SHL-0.51
+
+-#include <printf.h>
++#include <stdio.h>
+
+ #include "sim.hh"
+
+diff --git a/target/common/test/tb_lib.hh b/target/common/test/tb_lib.hh
+index e117289..11c9b4c 100644
+--- a/target/common/test/tb_lib.hh
++++ b/target/common/test/tb_lib.hh
+@@ -12,7 +12,7 @@ namespace sim {
+
+ struct GlobalMemory {
+     static constexpr size_t ADDR_SHIFT = 12;
+-    static constexpr size_t PAGE_SIZE = (size_t)1 << ADDR_SHIFT;
++    static constexpr size_t SIZE_OF_PAGE = (size_t)1 << ADDR_SHIFT;
+
+     std::unordered_map<uint64_t, std::unique_ptr<uint8_t[]>> pages;
+     std::set<uint64_t> touched;
+@@ -49,8 +49,8 @@ struct GlobalMemory {
+             if (!page) {
+                 // std::cout << "[TB] Allocate page " << std::hex << (addr <<
+                 // ADDR_SHIFT) << "\n";
+-                page = std::make_unique<uint8_t[]>(PAGE_SIZE);
+-                std::fill(&page[0], &page[PAGE_SIZE], 0);
++                page = std::make_unique<uint8_t[]>(SIZE_OF_PAGE);
++                std::fill(&page[0], &page[SIZE_OF_PAGE], 0);
+             }
+             // std::cout << "[TB] Write to page " << std::hex << (addr <<
+             // ADDR_SHIFT)
+@@ -67,7 +67,7 @@ struct GlobalMemory {
+                     if (host) {
+                         *host = data[data_idx];
+                     } else {
+-                        page[i % PAGE_SIZE] = data[data_idx];
++                        page[i % SIZE_OF_PAGE] = data[data_idx];
+                         any_changed = true;
+                     }
+                 }
+@@ -101,7 +101,7 @@ struct GlobalMemory {
+                     if (page) {
+                         // std::cout << "[TB] Read byte " << std::hex << i <<
+                         // "\n";
+-                        data[data_idx] = page[i % PAGE_SIZE];
++                        data[data_idx] = page[i % SIZE_OF_PAGE];
+                     } else {
+                         data[data_idx] = 0;
+                     }
+diff --git a/target/common/test/verilator_lib.cc b/target/common/test/verilator_lib.cc
+index 3e1ae89..7852b77 100644
+--- a/target/common/test/verilator_lib.cc
++++ b/target/common/test/verilator_lib.cc
+@@ -2,7 +2,7 @@
+ // Solderpad Hardware License, Version 0.51, see LICENSE for details.
+ // SPDX-License-Identifier: SHL-0.51
+
+-#include <printf.h>
++#include <stdio.h>
+
+ #include "Vtestharness.h"
+ #include "Vtestharness__Dpi.h"
