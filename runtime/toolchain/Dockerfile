@@ -9,6 +9,7 @@ ARG INSTALL_DIR=/opt
 
 FROM alpine:3.18 as toolchain-build
 
+# Args needed by a build stage need to redeclared.
 ARG LLVM_VERSION
 ARG PICOLIBC_VERSION
 ARG INSTALL_DIR

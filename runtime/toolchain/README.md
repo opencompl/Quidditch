@@ -7,13 +7,14 @@ The goals of the toolchain are:
 
 * Minimal: The image is currently "only" 800MB.
 * Easy to maintain: Only upstream components are used, no forks.
-* Modern: The toolchain uses a full LLVM 18 toolchain with `picolibc` as C standard library.
+* Modern: The toolchain support C and C++ and uses a full LLVM 18 toolchain with `picolibc` as C standard library.
 
 Why not https://github.com/pulp-platform/llvm-project/?
 The pulp toolchain is based on LLVM 12 and a fork of LLVM, therefore not easily maintainable.
 Furthermore, the toolchain has generally not been used for larger applications requiring a more complete `libc` and
 therefore does not have out-of-the-box support for things like `malloc`.
-**Note that this toolchain does not support any of the intrinsics or mnemonics that the pulp toolchain does**
+**Note that this toolchain does not support any of the intrinsics or mnemonics that the pulp toolchain does and never
+will**
 
 ## Installation
 
@@ -47,3 +48,13 @@ environment.
 The toolchain file is located at `<root-dir>/ToolchainFile.cmake`.
 When building with cmake, add `-DCMAKE_TOOLCHAIN_FILE=<root-dir>/ToolchainFile.cmake` to your `cmake` command line to
 start using the toolchain.
+
+## Building the Docker
+
+Building the docker image requires running
+
+```shell
+docker build -f toolchain/Dockerfile -t <image-name> .
+```
+
+from within the `<root>/runtime` directory.
