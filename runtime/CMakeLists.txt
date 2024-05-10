@@ -1,7 +1,9 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.21)
+
 project(QuidditchRuntime LANGUAGES C ASM)
 
 set(IREE_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../iree" CACHE STRING "IREE source code path")
+set(SNITCH_CLUSTER_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../snitch_cluster" CACHE STRING "snitch_cluster source code path")
 set(QUIDDITCH_CODEGEN_BUILD_DIR "" CACHE STRING "CMake generation directory with a compiled 'iree-compile'")
 
 list(APPEND CMAKE_MODULE_PATH
@@ -15,4 +17,9 @@ add_definitions(-DIREE_PLATFORM_GENERIC)
 add_definitions(-DIREE_USER_CONFIG_H="${CMAKE_CURRENT_LIST_DIR}/iree-configuration/config.h")
 add_subdirectory(iree-configuration)
 
+add_subdirectory(snitch_cluster SYSTEM EXCLUDE_FROM_ALL)
+
 add_subdirectory(samples)
+
+enable_testing()
+add_subdirectory(tests)

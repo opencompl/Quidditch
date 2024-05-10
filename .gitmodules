@@ -1,3 +1,6 @@
 [submodule "iree"]
 	path = iree
 	url = https://github.com/iree-org/iree
+[submodule "snitch_cluster"]
+	path = snitch_cluster
+	url = https://github.com/pulp-platform/snitch_cluster
