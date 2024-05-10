@@ -1,0 +1,139 @@
+name: Builds
+
+permissions:
+  contents: read
+  actions: write
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+jobs:
+  build-compiler:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install minimum required cmake and ninja
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.21.0"
+
+      - name: Install CCache
+        uses: Chocobo1/setup-ccache-action@v1
+        with:
+          ccache_options: |
+            max_size=400M
+            compiler_check=none
+
+      - name: Install Compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install lld clang
+
+      - name: Configure
+        run: |
+          cmake -G Ninja -Bquidditch-compiler-build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DIREE_ENABLE_ASSERTIONS=ON \
+          -DIREE_ENABLE_LLD=ON \
+          -DIREE_ENABLE_THIN_ARCHIVES=ON \
+          -DIREE_HAL_DRIVER_DEFAULTS=OFF \
+          -DIREE_TARGET_BACKEND_DEFAULTS=OFF \
+          -DIREE_TARGET_BACKEND_LLVM_CPU=ON \
+          -DPython3_ROOT_DIR="$pythonLocation" \
+          -DPython3_FIND_STRATEGY=LOCATION \
+          -S ${{github.workspace}}/codegen
+
+      - name: Build
+        run: cmake --build quidditch-compiler-build --target iree-compile
+
+      # TODO: Test?
+
+      - name: Remove object files prior to upload
+        working-directory: ${{github.workspace}}/quidditch-compiler-build
+        run: |
+          find . -name "*.o" -type f -delete
+
+      - name: Tar build directory
+        working-directory: ${{github.workspace}}
+        run: |
+          tar -cvf quidditch-compiler-build.tar quidditch-compiler-build
+
+      - name: Upload iree-compile
+        uses: actions/upload-artifact@v4
+        with:
+          name: quidditch-compiler-build-dir
+          path: quidditch-compiler-build.tar
+
+  build-runtime:
+    runs-on: ubuntu-22.04
+    needs: [ build-compiler ]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          path: 'Quidditch'
+
+      - name: Download Quidditch Toolchain
+        run: |
+          mkdir ./toolchain
+          docker run --rm ghcr.io/opencompl/quidditch/toolchain:main tar -cC /opt/quidditch-toolchain . \
+          | tar -xC ./toolchain
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install Python dependencies
+        run: python -m pip install -r Quidditch/runtime/requirements.txt
+
+      - name: Install minimum required cmake and ninja
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.21.0"
+
+      - name: Install bender
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: bender
+          version: '~0.28.0'
+
+      - name: Download iree-compile
+        uses: actions/download-artifact@v4
+        with:
+          name: quidditch-compiler-build-dir
+
+      - name: Untar iree-compile
+        run: |
+          tar -xf quidditch-compiler-build.tar
+
+      - name: Configure build
+        run: |
+          cmake -GNinja -Bquidditch-runtime-build \
+          -DQUIDDITCH_CODEGEN_BUILD_DIR=${{github.workspace}}/quidditch-compiler-build \
+          -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/toolchain/ToolchainFile.cmake \
+          -S ${{github.workspace}}/Quidditch/runtime
+
+      - name: Build
+        run: cmake --build quidditch-runtime-build
+
+      - name: Test
+        working-directory: ${{github.workspace}}/quidditch-runtime-build
+        # TODO: This should run a proper test suite once we are no longer using verilator.
+        run: ctest --extra-verbose -j$(nproc) -R HelloWorld

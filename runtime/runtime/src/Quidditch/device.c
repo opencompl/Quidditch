@@ -90,7 +90,7 @@ static iree_status_t create_pipeline_layout(
 static iree_status_t create_semaphore(iree_hal_device_t *base_device,
                                       uint64_t initial_value,
                                       iree_hal_semaphore_t **out_semaphore) {
-  [[maybe_unused]] quidditch_device_t *device = cast_device(base_device);
+  IREE_ATTRIBUTE_UNUSED quidditch_device_t *device = cast_device(base_device);
 
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED);
 }
