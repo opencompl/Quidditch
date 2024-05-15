@@ -2,7 +2,7 @@
 # Global args.
 ARG LLVM_VERSION=18
 ARG PICOLIBC_VERSION=1.8.6
-ARG SNITCH_CLUSTER_SHA=e02cc9e3f24b92d4607455d5345caba3eb6273b2
+ARG SNITCH_CLUSTER_SHA=1f984781957520b3784b9ab17e5eeb34eec763f1
 ARG VERILATOR_RELEASE=v4.228
 ARG BENDER_RELEASE=0.27.1
 ARG INSTALL_DIR=/opt
@@ -94,8 +94,6 @@ ENV VERILATOR_ROOT=$INSTALL_DIR/verilator
 RUN git clone --depth 1 https://github.com/verilator/verilator -b $VERILATOR_RELEASE
 RUN cd verilator && autoconf && ./configure && make -j$(nproc)
 ENV VLT=$VERILATOR_ROOT/bin/verilator
-COPY toolchain/snRuntime-01.patch /root/
-RUN cd ./snitch_cluster && git apply /root/snRuntime-01.patch
 RUN cd ./snitch_cluster/target/snitch_cluster && \
     make LDFLAGS=-static bin/snitch_cluster.vlt -j$(nproc)
 
