@@ -90,5 +90,4 @@ jobs:
 
       - name: Test Runtime
         working-directory: ${{github.workspace}}/quidditch-runtime-build
-        # TODO: This should run a proper test suite once we are no longer using verilator.
-        run: ctest --extra-verbose -j$(nproc) -R HelloWorld
+        run: ctest --extra-verbose -j$(nproc)
