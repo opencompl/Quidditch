@@ -5,15 +5,27 @@ iree_compiler_register_plugin(
         ::Quidditch
 )
 
+iree_tablegen_library(
+        NAME
+        PassesIncGen
+        TD_FILE
+        "Passes.td"
+        OUTS
+        --gen-pass-decls Passes.h.inc
+)
+
 iree_cc_library(
         NAME
         Quidditch
         HDRS
-
+        "Passes.h"
+        "Passes.h.inc"
         SRCS
         "QuidditchTarget.cpp"
+        "HoistHALOpsToFunc.cpp"
+        "FilterForxDSL.cpp"
         DEPS
-        IREELLVMCPUTargetDeps
+        ::PassesIncGen
         IREELinalgTransformDialect
         LLVMAnalysis
         LLVMBitReader
@@ -22,6 +34,10 @@ iree_cc_library(
         LLVMLinker
         LLVMSupport
         LLVMTargetParser
+        LLVMRISCVAsmParser
+        LLVMRISCVCodeGen
+        LLVMRISCVDesc
+        LLVMRISCVInfo
         MLIRArmNeonDialect
         MLIRArmSMEDialect
         MLIRArmSMEToLLVMIRTranslation
@@ -44,5 +60,6 @@ iree_cc_library(
         iree::compiler::Dialect::Util::IR
         iree::compiler::PluginAPI
         iree::compiler::Utils
+        iree::compiler::plugins::target::LLVMCPU
         PUBLIC
 )

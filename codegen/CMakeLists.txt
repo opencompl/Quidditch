@@ -4,3 +4,8 @@ project(QuidditchCompiler LANGUAGES CXX C)
 set(IREE_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../iree" CACHE STRING "IREE source code path")
 
 add_subdirectory(iree-configuration)
+
+enable_testing()
+include(CTest)
+
+add_subdirectory(tests)

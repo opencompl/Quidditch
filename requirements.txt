@@ -1,0 +1,3 @@
+-r codegen/requirements.txt
+-r runtime/requirements.txt
+-e xdsl

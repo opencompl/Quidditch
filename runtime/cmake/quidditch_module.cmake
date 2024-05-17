@@ -1,4 +1,18 @@
-set(IREE_COMPILE_PATH "${QUIDDITCH_CODEGEN_BUILD_DIR}/iree-configuration/iree/tools/iree-compile")
+file(GLOB cmake_build_dirs LIST_DIRECTORIES true "${PROJECT_SOURCE_DIR}/../codegen/cmake-build-*")
+find_program(IREE_COMPILE_PATH iree-compile
+    PATHS ${QUIDDITCH_CODEGEN_BUILD_DIR}
+    "${PROJECT_SOURCE_DIR}/.."
+    "${PROJECT_SOURCE_DIR}/../codegen"
+    # Conventional build directories created by IDEs or humans.
+    "${PROJECT_SOURCE_DIR}/../codegen/build"
+    ${cmake_build_dirs}
+    PATH_SUFFIXES
+    "iree-configuration/iree/tools"
+    REQUIRED
+    NO_DEFAULT_PATH
+    DOC "Path to the build directory of <root>/codegen"
+)
+message(STATUS "Using iree-compile at ${IREE_COMPILE_PATH}")
 
 function(quidditch_module)
     cmake_parse_arguments(_RULE "" "SRC" "FLAGS;DEPENDS" ${ARGN})
