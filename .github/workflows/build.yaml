@@ -83,6 +83,7 @@ jobs:
         run: |
           cmake -GNinja -Bquidditch-runtime-build \
           -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/toolchain/ToolchainFile.cmake \
+          -DPULP_CLANG_PATH=${{github.workspace}}/pulp-toolchain/bin/clang \
           -S ${{github.workspace}}/runtime
 
       - name: Build Runtime
