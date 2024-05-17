@@ -41,6 +41,8 @@ void HoistHALOpsToFunc::runOnOperation() {
       continue;
 
     func->setAttr("xdsl_generated", builder.getUnitAttr());
+    // xDSL only supports barepointer lowering right now.
+    func->setAttr("llvm.bareptr", builder.getUnitAttr());
 
     // Find all HAL operations that need to be hoisted and any other operations
     // they depend on.
