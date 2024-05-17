@@ -52,9 +52,9 @@ jobs:
 
       - name: Install Pulp Toolchain
         run: |
-          mkdir ./pulp-toolchain
+          mkdir ${{github.workspace}}/pulp-toolchain
           wget -qO- https://github.com/pulp-platform/llvm-project/releases/download/0.12.0/riscv32-pulp-llvm-ubuntu2004-0.12.0.tar.gz \
-          | tar --strip-components=1 -xzv -C ./pulp-toolchain
+          | tar --strip-components=1 -xzv -C ${{github.workspace}}/pulp-toolchain
 
       - name: Configure Compiler
         run: |
@@ -67,7 +67,7 @@ jobs:
           -DIREE_ENABLE_ASSERTIONS=ON \
           -DIREE_ENABLE_LLD=ON \
           -DIREE_ENABLE_THIN_ARCHIVES=ON \
-          -DPULP_CLANG_PATH= ${{github.workspace}}/pulp-toolchain/bin/clang \
+          -DPULP_CLANG_PATH=${{github.workspace}}/pulp-toolchain/bin/clang \
           -S ${{github.workspace}}/codegen
 
       - name: Build and Test Compiler
