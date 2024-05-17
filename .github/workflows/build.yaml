@@ -83,7 +83,7 @@ jobs:
         run: |
           cmake -GNinja -Bquidditch-runtime-build \
           -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/toolchain/ToolchainFile.cmake \
-          -S ${{github.workspace}}/Quidditch/runtime
+          -S ${{github.workspace}}/runtime
 
       - name: Build Runtime
         run: cmake --build quidditch-runtime-build
