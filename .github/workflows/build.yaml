@@ -71,7 +71,7 @@ jobs:
           -S ${{github.workspace}}/codegen
 
       - name: Build and Test Compiler
-        run: cmake --build quidditch-compiler-build --target check-quidditch
+        run: cmake --build ${{github.workspace}}/codegen/build --target check-quidditch
 
       - name: Download Quidditch Toolchain
         run: |

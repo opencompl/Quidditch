@@ -14,8 +14,6 @@ find_program(IREE_COMPILE_PATH iree-compile
 )
 message(STATUS "Using iree-compile at ${IREE_COMPILE_PATH}")
 
-set(IREE_COMPILE_PATH "${QUIDDITCH_CODEGEN_BUILD_DIR}/iree-configuration/iree/tools/iree-compile")
-
 function(quidditch_module)
     cmake_parse_arguments(_RULE "" "SRC" "FLAGS;DEPENDS" ${ARGN})
 
