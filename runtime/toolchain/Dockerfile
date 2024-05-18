@@ -82,7 +82,7 @@ ARG INSTALL_DIR
 
 WORKDIR $INSTALL_DIR
 
-RUN apk update && apk add --no-cache py3-pip git cargo autoconf flex-dev bison make gcc g++ coreutils dtc patch
+RUN apk update && apk add --no-cache py3-pip git cargo autoconf flex-dev bison make clang coreutils dtc patch
 
 RUN cargo install bender --locked --version $BENDER_RELEASE
 ENV PATH=$PATH:/root/.cargo/bin
@@ -94,10 +94,10 @@ RUN git clone https://github.com/pulp-platform/snitch_cluster && \
 # snitch_cluster repo does not yet support Verilator 5, see: https://github.com/pulp-platform/snitch_cluster/pull/76.
 ENV VERILATOR_ROOT=$INSTALL_DIR/verilator
 RUN git clone --depth 1 https://github.com/verilator/verilator -b $VERILATOR_RELEASE
-RUN cd verilator && autoconf && ./configure && make -j$(nproc)
+RUN cd verilator && autoconf && CC=clang CXX=clang++ ./configure && make -j$(nproc)
 ENV VLT=$VERILATOR_ROOT/bin/verilator
 RUN cd ./snitch_cluster/target/snitch_cluster && \
-    make LDFLAGS=-static bin/snitch_cluster.vlt -j$(nproc)
+    make VLT_USE_LLVM=ON LDFLAGS=-static bin/snitch_cluster.vlt -j$(nproc)
 
 RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
 RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/
