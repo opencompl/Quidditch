@@ -65,8 +65,5 @@ jobs:
           -DOVERRIDE_VENV=ON \
           -S ${{github.workspace}}
 
-      - name: Build
-        run: cmake --build ${{github.workspace}}/build
-
-      - name: Test
+      - name: Build and Test
         run: cmake --build ${{github.workspace}}/build --target test

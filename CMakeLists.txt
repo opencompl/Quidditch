@@ -43,6 +43,9 @@ ExternalProject_Add(codegen
     ${host_cmake_args}
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/codegen
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/codegen
+    BUILD_COMMAND ${CMAKE_COMMAND}
+    --build ${CMAKE_CURRENT_BINARY_DIR}/codegen
+    --target quidditch-test-depends
     TEST_COMMAND ""
     INSTALL_COMMAND ""
     USES_TERMINAL_CONFIGURE ON
@@ -60,7 +63,6 @@ ExternalProject_Add(bender
     --manifest-path=${CMAKE_CURRENT_LIST_DIR}/bender/Cargo.toml
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/bender
     INSTALL_COMMAND ""
-    TEST_COMMAND ""
     USES_TERMINAL_CONFIGURE ON
     USES_TERMINAL_BUILD ON
     USES_TERMINAL_TEST ON
@@ -87,12 +89,15 @@ ExternalProject_Add(runtime
 )
 add_dependencies(runtime codegen bender)
 
+enable_testing()
 include(ProcessorCount)
 ProcessorCount(N)
 
-enable_testing()
 include(CTest)
 set(CMAKE_CTEST_ARGUMENTS "--verbose")
+file(CONFIGURE OUTPUT ${CMAKE_BINARY_DIR}/CTestCustom.cmake CONTENT [[
+set(CTEST_CUSTOM_PRE_TEST "@CMAKE_COMMAND@ --build @CMAKE_BINARY_DIR@")
+]] @ONLY)
 # lit uses maximum parallelism by default.
 add_test(NAME
     codegen-tests

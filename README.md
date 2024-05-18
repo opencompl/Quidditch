@@ -41,16 +41,13 @@ cmake .. -GNinja \
   # Optional but highly recommended 
   -DCMAKE_C_COMPILER=clang \
   -DCMAKE_CXX_COMPILER=clang++ \
-  -DCMAKE_CXX_COMPILER=clang++ \
   # Optional for improved caching, requires ccache to be installed.
   # -DCMAKE_C_COMPILER_LAUNCHER=ccache \
   # -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
   -DPULP_CLANG_PATH=$INSTALL_DIR/pulp-toolchain/bin/clang \
   -DQUIDDITCH_TOOLCHAIN_FILE=$INSTALL_DIR/quidditch-toolchain/ToolchainFile.cmake
   
-# Build everything:
-cmake --build .
-# Test everything. Requires everything to be built.
+# Build and Test everything.
 cmake --build . --target test
 ```
 
