@@ -35,20 +35,10 @@ jobs:
             max_size=400M
             compiler_check=none
 
-      - name: Install Compiler
+      - name: Install Native Compilers
         run: |
           sudo apt-get update
-          sudo apt-get install lld clang
-
-      - name: Install Python dependencies
-        run: |
-          pip install -r requirements.txt
-
-      - name: Install bender
-        uses: baptiste0928/cargo-install@v3
-        with:
-          crate: bender
-          version: '~0.28.0'
+          sudo apt-get install lld clang cargo
 
       - name: Install Pulp Toolchain
         run: |
@@ -56,39 +46,24 @@ jobs:
           wget -qO- https://github.com/pulp-platform/llvm-project/releases/download/0.12.0/riscv32-pulp-llvm-ubuntu2004-0.12.0.tar.gz \
           | tar --strip-components=1 -xzv -C ${{github.workspace}}/pulp-toolchain
 
-      - name: Configure Compiler
-        run: |
-          cmake -G Ninja -B ${{github.workspace}}/codegen/build \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_C_COMPILER=clang \
-          -DCMAKE_CXX_COMPILER=clang++ \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          -DIREE_ENABLE_ASSERTIONS=ON \
-          -DIREE_ENABLE_LLD=ON \
-          -DIREE_ENABLE_THIN_ARCHIVES=ON \
-          -DPULP_CLANG_PATH=${{github.workspace}}/pulp-toolchain/bin/clang \
-          -S ${{github.workspace}}/codegen
-
-      - name: Build and Test Compiler
-        run: cmake --build ${{github.workspace}}/codegen/build --target check-quidditch
-
-      - name: Download Quidditch Toolchain
+      - name: Install Quidditch Toolchain
         run: |
           mkdir ./toolchain
           docker run --rm ghcr.io/opencompl/quidditch/toolchain:main tar -cC /opt/quidditch-toolchain . \
           | tar -xC ./toolchain
 
-      - name: Configure Runtime
+      - name: Configure Megabuild
         run: |
-          cmake -GNinja -Bquidditch-runtime-build \
-          -DCMAKE_TOOLCHAIN_FILE=${{github.workspace}}/toolchain/ToolchainFile.cmake \
+          cmake -G Ninja -B ${{github.workspace}}/build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER=clang \
+          -DCMAKE_CXX_COMPILER=clang++ \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DPULP_CLANG_PATH=${{github.workspace}}/pulp-toolchain/bin/clang \
-          -S ${{github.workspace}}/runtime
+          -DQUIDDITCH_TOOLCHAIN_FILE=${{github.workspace}}/toolchain/ToolchainFile.cmake \
+          -DOVERRIDE_VENV=ON \
+          -S ${{github.workspace}}
 
-      - name: Build Runtime
-        run: cmake --build quidditch-runtime-build
-
-      - name: Test Runtime
-        working-directory: ${{github.workspace}}/quidditch-runtime-build
-        run: ctest --extra-verbose -j$(nproc)
+      - name: Build and Test
+        run: cmake --build ${{github.workspace}}/build --target test

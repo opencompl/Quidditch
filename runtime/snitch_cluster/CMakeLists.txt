@@ -3,7 +3,7 @@ project(snRuntime C ASM)
 # Required for running regtool and clustergen.
 find_package(Python3 REQUIRED)
 # Required for finding regtool.
-find_program(bender_path NAMES bender REQUIRED)
+find_program(BENDER_PATH NAMES bender REQUIRED)
 
 set(SNITCH_RUNTIME_TARGET "rtl" CACHE STRING "Snitch runtime target to use")
 
@@ -14,10 +14,11 @@ set(runtime_dir ${CMAKE_CURRENT_LIST_DIR}/${SNITCH_RUNTIME_TARGET})
 
 # Get the path of regtool from bender. This will additionally automatically
 # install it.
-execute_process(COMMAND ${bender_path} path register_interface
+execute_process(COMMAND ${BENDER_PATH} path register_interface
     OUTPUT_VARIABLE reggen_base_path
     OUTPUT_STRIP_TRAILING_WHITESPACE
-    WORKING_DIRECTORY ${snRuntimeSrc})
+    WORKING_DIRECTORY ${snRuntimeSrc}
+    COMMAND_ERROR_IS_FATAL ANY)
 set(reggen_path ${reggen_base_path}/vendor/lowrisc_opentitan/util/regtool.py)
 
 # Generate the 'snitch_cluster_peripheral.h' header.

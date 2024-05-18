@@ -41,10 +41,12 @@ foreach (_TOOL IN LISTS QUIDDITCH_TEST_DEPENDS)
     list(APPEND _LIT_PATH_ARGS "--path" "$<TARGET_FILE_DIR:${_TOOL}>")
 endforeach ()
 
+add_custom_target(quidditch-test-depends DEPENDS ${QUIDDITCH_TEST_DEPENDS})
+
 add_custom_target(check-quidditch
         COMMAND
         ${Python3_EXECUTABLE}
         ${QUIDDITCH_BIN_DIR}/quidditch-lit.py
         "${CMAKE_CURRENT_BINARY_DIR}"
         -v ${_LIT_PATH_ARGS}
-        DEPENDS ${QUIDDITCH_TEST_DEPENDS})
+    DEPENDS quidditch-test-depends)
