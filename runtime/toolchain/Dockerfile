@@ -54,6 +54,8 @@ RUN mkdir picolibc/build && cd picolibc/build &&  \
     -Dincludedir=include \
     -Dlibdir=lib  \
     --cross-file /cross.txt  \
+    --buildtype=release  \
+    -Dnewlib-nano-malloc=false \
     -Dpicocrt=false  \
     -Dpicolib=false  \
     -Dposix-console=true  \
