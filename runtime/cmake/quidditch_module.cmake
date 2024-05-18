@@ -13,6 +13,23 @@ find_program(IREE_COMPILE_PATH iree-compile
     DOC "Path to the build directory of <root>/codegen"
 )
 message(STATUS "Using iree-compile at ${IREE_COMPILE_PATH}")
+if (IREE_COMPILE_PATH MATCHES "iree-configuration/iree/tools/iree-compile$")
+  string(LENGTH "/iree-configuration/iree/tools/iree-compile" length_suffix)
+  string(LENGTH ${IREE_COMPILE_PATH} length_path)
+  math(EXPR length "${length_path} - ${length_suffix}")
+  string(SUBSTRING ${IREE_COMPILE_PATH} 0 ${length} maybe_build_dir)
+  if (EXISTS "${maybe_build_dir}/CMakeCache.txt")
+    message(STATUS "Detected iree-compile within another cmake build")
+    # This makes the assumption that the other cmake build uses the same cmake
+    # executable.
+    add_custom_target(iree-keep-up-to-date
+        BYPRODUCTS ${IREE_COMPILE_PATH}
+        COMMAND ${CMAKE_COMMAND} --build ${maybe_build_dir} --target iree-compile
+        COMMENT "Updating iree-compile"
+        USES_TERMINAL
+    )
+  endif ()
+endif ()
 
 find_package(Python3 REQUIRED)
 cmake_path(GET Python3_EXECUTABLE PARENT_PATH python_bin_dir)
