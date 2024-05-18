@@ -49,7 +49,7 @@ jobs:
       - name: Install Quidditch Toolchain
         run: |
           mkdir ./toolchain
-          docker run --rm ghcr.io/opencompl/quidditch/toolchain:optimize-speed-over-size tar -cC /opt/quidditch-toolchain . \
+          docker run --rm ghcr.io/opencompl/quidditch/toolchain:main tar -cC /opt/quidditch-toolchain . \
           | tar -xC ./toolchain
 
       - name: Configure Megabuild
