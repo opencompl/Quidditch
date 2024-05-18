@@ -62,6 +62,7 @@ jobs:
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DPULP_CLANG_PATH=${{github.workspace}}/pulp-toolchain/bin/clang \
           -DQUIDDITCH_TOOLCHAIN_FILE=${{github.workspace}}/toolchain/ToolchainFile.cmake \
+          -DOVERRIDE_VENV=ON \
           -S ${{github.workspace}}
 
       - name: Build
