@@ -6,6 +6,7 @@ ARG SNITCH_CLUSTER_SHA=1f984781957520b3784b9ab17e5eeb34eec763f1
 ARG VERILATOR_RELEASE=v4.228
 ARG BENDER_RELEASE=0.27.1
 ARG INSTALL_DIR=/opt
+ARG PULP_TOOLCHAIN_RELEASE=0.12.0
 
 FROM alpine:3.18 as toolchain-build
 
@@ -73,19 +74,50 @@ RUN cd llvm-project/llvm/build && rm -rf * && \
          -C  /root/phase2.cmake && \
         ninja install/strip
 
+# Ubuntu as Rust has issues with alpine.
+FROM ubuntu:24.04 as bender-build
+
+ARG BENDER_RELEASE
+ARG INSTALL_DIR
+
+ENV RUSTFLAGS="-C target-feature=+crt-static"
+
+RUN apt-get update && apt-get install -y cargo
+RUN cargo install bender --locked --version $BENDER_RELEASE --target x86_64-unknown-linux-gnu
+RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
+RUN cp /root/.cargo/bin/bender $INSTALL_DIR/quidditch-toolchain/bin/
+
+FROM alpine:3.18 as pulp-build
+
+ARG INSTALL_DIR
+ARG PULP_TOOLCHAIN_RELEASE
+
+RUN apk update && apk add --no-cache cmake git musl-dev clang clang-dev \
+    python3 ninja
+
+RUN git clone --depth 1  https://github.com/pulp-platform/llvm-project -b $PULP_TOOLCHAIN_RELEASE
+RUN cd llvm-project/llvm && mkdir build && cd build && \
+    cmake .. -GNinja -DLLVM_BUILD_STATIC=ON -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+    -DLLVM_TARGETS_TO_BUILD="RISCV" -DCMAKE_BUILD_TYPE="Release" \
+    -DLLVM_DEFAULT_TARGET_TRIPLE="riscv32-unknown-elf" \
+    && ninja llvm-mc
+RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin
+RUN cp llvm-project/llvm/build/bin/llvm-mc $INSTALL_DIR/quidditch-toolchain/bin/pulp-as
+RUN strip $INSTALL_DIR/quidditch-toolchain/bin/pulp-as
+
 FROM alpine:3.18 as verilator-build
 
 ARG SNITCH_CLUSTER_SHA
 ARG VERILATOR_RELEASE
-ARG BENDER_RELEASE
 ARG INSTALL_DIR
 
 WORKDIR $INSTALL_DIR
 
-RUN apk update && apk add --no-cache py3-pip git cargo autoconf flex-dev bison make clang coreutils dtc patch
+RUN apk update && apk add --no-cache py3-pip git autoconf flex-dev bison make musl-dev clang coreutils dtc patch
 
-RUN cargo install bender --locked --version $BENDER_RELEASE
-ENV PATH=$PATH:/root/.cargo/bin
+ENV PATH=/root:$PATH
+COPY --from=bender-build $INSTALL_DIR/quidditch-toolchain/bin/bender /root
+
 COPY requirements.txt /root/
 RUN pip install --break-system-packages -r /root/requirements.txt
 RUN git clone https://github.com/pulp-platform/snitch_cluster && \
@@ -108,4 +140,6 @@ FROM alpine:3.18
 ARG INSTALL_DIR
 
 COPY --from=toolchain-build $INSTALL_DIR/quidditch-toolchain $INSTALL_DIR/quidditch-toolchain
+COPY --from=bender-build $INSTALL_DIR/quidditch-toolchain/bin/bender $INSTALL_DIR/quidditch-toolchain/bin
+COPY --from=pulp-build $INSTALL_DIR/quidditch-toolchain/bin/pulp-as $INSTALL_DIR/quidditch-toolchain/bin
 COPY --from=verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin
