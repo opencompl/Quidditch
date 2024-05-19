@@ -7,6 +7,3 @@
 [submodule "xdsl"]
 	path = xdsl
 	url = https://github.com/xdslproject/xdsl
-[submodule "bender"]
-	path = bender
-	url = https://github.com/pulp-platform/bender

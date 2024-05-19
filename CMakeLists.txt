@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.21)
 project(Quidditch C CXX)
 
 set(QUIDDITCH_TOOLCHAIN_FILE "" CACHE STRING "Path to the quidditch toolchain's toolchain file")
-set(PULP_CLANG_PATH "" CACHE STRING "Path to clang within the pulp toolchain")
 set(OVERRIDE_VENV OFF CACHE BOOL "")
+cmake_path(REMOVE_FILENAME QUIDDITCH_TOOLCHAIN_FILE OUTPUT_VARIABLE QUIDDITCH_TOOLCHAIN_ROOT)
 
 if (NOT DEFINED ENV{VIRTUAL_ENV} AND NOT ${OVERRIDE_VENV})
   message(FATAL_ERROR [[
@@ -39,7 +39,7 @@ append_if_defined(host_cmake_args CMAKE_CXX_COMPILER_LAUNCHER)
 ExternalProject_Add(codegen
     CMAKE_ARGS
     -DIREE_ENABLE_LLD=ON
-    -DPULP_CLANG_PATH=${PULP_CLANG_PATH}
+    -DQUIDDITCH_TOOLCHAIN_ROOT=${QUIDDITCH_TOOLCHAIN_ROOT}
     ${host_cmake_args}
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/codegen
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/codegen
@@ -53,21 +53,6 @@ ExternalProject_Add(codegen
     USES_TERMINAL_TEST ON
 )
 
-ExternalProject_Add(bender
-    SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/bender
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND
-    ${CARGO_PATH} build
-    --release
-    --target-dir=${CMAKE_CURRENT_BINARY_DIR}/bender
-    --manifest-path=${CMAKE_CURRENT_LIST_DIR}/bender/Cargo.toml
-    BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/bender
-    INSTALL_COMMAND ""
-    USES_TERMINAL_CONFIGURE ON
-    USES_TERMINAL_BUILD ON
-    USES_TERMINAL_TEST ON
-)
-
 set(runtime_cmake_args)
 append_if_defined(runtime_cmake_args CMAKE_BUILD_TYPE)
 append_if_defined(runtime_cmake_args CMAKE_C_COMPILER_LAUNCHER)
@@ -75,9 +60,7 @@ append_if_defined(runtime_cmake_args CMAKE_CXX_COMPILER_LAUNCHER)
 ExternalProject_Add(runtime
     CMAKE_ARGS
     -DCMAKE_TOOLCHAIN_FILE=${QUIDDITCH_TOOLCHAIN_FILE}
-    -DPULP_CLANG_PATH=${PULP_CLANG_PATH}
     -DQUIDDITCH_CODEGEN_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/codegen
-    -DBENDER_PATH=${CMAKE_CURRENT_BINARY_DIR}/bender/release/bender
     ${runtime_cmake_args}
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/runtime
     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/runtime
@@ -87,7 +70,7 @@ ExternalProject_Add(runtime
     USES_TERMINAL_BUILD ON
     USES_TERMINAL_TEST ON
 )
-add_dependencies(runtime codegen bender)
+add_dependencies(runtime codegen)
 
 enable_testing()
 include(ProcessorCount)

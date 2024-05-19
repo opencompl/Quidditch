@@ -75,7 +75,7 @@ function(quidditch_module)
     list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=quidditch")
     list(APPEND _COMPILER_ARGS "--iree-quidditch-static-library-output-path=${_O_FILE_NAME}")
     list(APPEND _COMPILER_ARGS "--iree-quidditch-xdsl-opt-path=${XDSL_OPT_PATH}")
-    list(APPEND _COMPILER_ARGS "--iree-quidditch-pulp-clang-path=${PULP_CLANG_PATH}")
+    list(APPEND _COMPILER_ARGS "--iree-quidditch-toolchain-root=${QUIDDITCH_TOOLCHAIN_ROOT}")
   endif ()
 
   list(APPEND _COMPILER_ARGS "--output-format=vm-c")

@@ -1,7 +1,7 @@
 // RUN: iree-compile %s --iree-hal-target-backends=quidditch --iree-opt-demote-f64-to-f32=0 \
 // RUN:   --iree-quidditch-static-library-output-path=%t.o \
 // RUN:   --iree-quidditch-xdsl-opt-path=%xdsl-opt \
-// RUN:   --iree-quidditch-pulp-clang-path=%pulp-clang \
+// RUN:   --iree-quidditch-toolchain-root=%quidditch-toolchain-root \
 // RUN:   --output-format=vm-c \
 // RUN:   --iree-vm-target-index-bits=32 \
 // RUN:   -o /dev/null

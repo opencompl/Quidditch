@@ -40,12 +40,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install lld clang cargo
 
-      - name: Install Pulp Toolchain
-        run: |
-          mkdir ${{github.workspace}}/pulp-toolchain
-          wget -qO- https://github.com/pulp-platform/llvm-project/releases/download/0.12.0/riscv32-pulp-llvm-ubuntu2004-0.12.0.tar.gz \
-          | tar --strip-components=1 -xzv -C ${{github.workspace}}/pulp-toolchain
-
       - name: Install Quidditch Toolchain
         run: |
           mkdir ./toolchain
@@ -60,7 +54,6 @@ jobs:
           -DCMAKE_CXX_COMPILER=clang++ \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          -DPULP_CLANG_PATH=${{github.workspace}}/pulp-toolchain/bin/clang \
           -DQUIDDITCH_TOOLCHAIN_FILE=${{github.workspace}}/toolchain/ToolchainFile.cmake \
           -DOVERRIDE_VENV=ON \
           -S ${{github.workspace}}
