@@ -60,7 +60,7 @@ public:
 struct QuidditchTargetOptions {
   std::string staticLibraryOutputPath;
   std::string xDSLOptPath;
-  std::string pulpClangPath;
+  std::string toolChainRoot;
 
   void bindOptions(OptionsBinder &binder) {
     LLVMInitializeRISCVTarget();
@@ -83,10 +83,9 @@ struct QuidditchTargetOptions {
                             llvm::cl::desc("Path to the 'xdsl-opt' executable "
                                            "to use for kernel compilation."));
     binder.opt<std::string>(
-        "iree-quidditch-pulp-clang-path", pulpClangPath,
-        llvm::cl::cat(category),
-        llvm::cl::desc("Path to the 'clang' executable "
-                       "that is part of the pulp toolchain."));
+        "iree-quidditch-toolchain-root", toolChainRoot, llvm::cl::cat(category),
+        llvm::cl::desc("Path to the root directory of the Quidditch toolchain "
+                       "(containing the toolchain file)"));
   }
 };
 
@@ -179,11 +178,11 @@ public:
 
       auto &objectFile = objectFiles.emplace_back(
           IREE::HAL::Artifact::createTemporary("xdsl-out", "o"));
-      ret = llvm::sys::ExecuteAndWait(targetOptions.pulpClangPath,
-                                      {targetOptions.pulpClangPath, "-c",
-                                       stdoutFile.str(), "-o", objectFile.path,
-                                       "-menable-experimental-extensions",
-                                       "-mcpu=snitch", "-mabi=ilp32d"});
+      ret = llvm::sys::ExecuteAndWait(
+          targetOptions.toolChainRoot + "/bin/pulp-as",
+          {targetOptions.toolChainRoot + "/bin/pulp-as", "--filetype=obj",
+           "--target-abi=ilp32d", stdoutFile.str(), "-o", objectFile.path,
+           "--mcpu=snitch", "-g"});
       if (ret != 0)
         return failure();
 
@@ -375,8 +374,7 @@ public:
 
     objectFiles.push_back(std::move(*objectFileOrFailure));
 
-    SmallVector<StringRef> arguments = {
-        targetOptions.pulpClangPath, "-fuse-ld=lld", "-nostartfiles", "-Wl,-r"};
+    SmallVector<StringRef> arguments = {"ld.lld", "-r"};
     llvm::append_range(
         arguments,
         llvm::map_range(objectFiles,
@@ -389,7 +387,8 @@ public:
     auto linkedObject = IREE::HAL::Artifact::createTemporary(libraryName, "o");
     arguments.push_back("-o");
     arguments.push_back(linkedObject.path);
-    int ret = llvm::sys::ExecuteAndWait(targetOptions.pulpClangPath, arguments);
+    int ret = llvm::sys::ExecuteAndWait(
+        targetOptions.toolChainRoot + "/bin/ld.lld", arguments);
     if (ret != 0)
       return failure();
 

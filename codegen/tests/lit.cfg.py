@@ -20,7 +20,7 @@ config.test_exec_root = os.path.join(config.binary_dir, "test")
 
 config.substitutions.append(("%PATH%", config.environment["PATH"]))
 config.substitutions.append(("%xdsl-opt", config.xdsl_opt))
-config.substitutions.append(("%pulp-clang", config.pulp_clang))
+config.substitutions.append(("%quidditch-toolchain-root", config.quidditch_toolchain_root))
 
 # FileCheck -enable-var-scope is enabled by default in MLIR test
 # This option avoids to accidentally reuse variable across -LABEL match,
