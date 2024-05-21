@@ -11,12 +11,6 @@ Building Quidditch requires the following tools to be installed:
 * Ninja (ideally)
 * Docker to install the Quidditch toolchain. See [the toolchain directory for more details](runtime/toolchain/README.md)
 
-`docker` is required to install the Quidditch toolchain using:
-```shell
-
-```
-See [the toolchain directory for more details](runtime/toolchain/README.md).
-
 Afterward, you can perform a mega build using:
 ```shell
 git clone --recursive https://github.com/opencompl/quidditch
