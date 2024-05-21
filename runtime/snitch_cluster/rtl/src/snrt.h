@@ -12,24 +12,16 @@
 #include "snitch_cluster_memory.h"
 
 // Forward declarations
-#include "alloc_decls.h"
-#include "cls_decls.h"
 #include "riscv_decls.h"
 #include "start_decls.h"
 #include "sync_decls.h"
 #include "team_decls.h"
 
 // Implementation
-#include "alloc.h"
-#include "cls.h"
 #include "cluster_interrupts.h"
 #include "dma.h"
 #include "dump.h"
-#include "eu.h"
-#include "kmp.h"
-#include "omp.h"
 #include "perf_cnt.h"
-#include "printf.h"
 #include "riscv.h"
 #include "snitch_cluster_global_interrupts.h"
 #include "ssr.h"

@@ -1,14 +1,16 @@
-#include <Quidditch/device.h>
+#include <Quidditch/device/device.h>
+#include <Quidditch/dispatch/dispatch.h>
+#include <Quidditch/loader/loader.h>
 
 #include <iree/base/allocator.h>
 #include <iree/hal/allocator.h>
-#include <iree/hal/local/loaders/static_library_loader.h>
 #include <iree/modules/hal/module.h>
 #include <iree/modules/hal/types.h>
 #include <iree/vm/instance.h>
 
 #include <simple_add.h>
 #include <simple_add_module.h>
+#include <snitch_cluster_defs.h>
 #include <team_decls.h>
 
 uint32_t snrt_l1_start_addr();
@@ -32,15 +34,17 @@ static iree_status_t setup_instance_and_device(
       add_dispatch_0_library_query};
 
   iree_hal_executable_loader_t* loader;
-  result = iree_hal_static_library_loader_create(
-      IREE_ARRAYSIZE(libraries), libraries,
-      iree_hal_executable_import_provider_null(), host_allocator, &loader);
+  result = quidditch_loader_create(IREE_ARRAYSIZE(libraries), libraries,
+                                   iree_hal_executable_import_provider_null(),
+                                   host_allocator, &loader);
   if (!iree_status_is_ok(result)) goto error_release_vm;
 
   l1_arena.buffer = (uint8_t*)snrt_l1_start_addr();
   l1_arena.length = 0;
-  // TODO: This is a lie and it WILL crash into our stack and CLS memory.
-  l1_arena.capacity = snrt_l1_end_addr() - snrt_l1_start_addr();
+  unsigned stack_size_per_core = 1 << SNRT_LOG2_STACK_SIZE;
+  l1_arena.capacity =
+      (snrt_l1_end_addr() - snrt_cluster_core_num() * stack_size_per_core) -
+      snrt_l1_start_addr();
 
   iree_hal_allocator_t* device_allocator;
   result =
@@ -67,8 +71,7 @@ error_release_vm:
 }
 
 int main() {
-  // TODO: Remove/redirect compute cores once implemented.
-  if (snrt_cluster_core_idx() != 0) return 0;
+  if (!snrt_is_dm_core()) return quidditch_dispatch_enter_worker_loop();
 
   double data[4];
 
@@ -194,5 +197,6 @@ exit:
     return -1;
   }
 
+  quidditch_dispatch_quit();
   return 0;
 }
