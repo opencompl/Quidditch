@@ -7,6 +7,7 @@ ARG VERILATOR_RELEASE=v4.228
 ARG BENDER_RELEASE=0.27.1
 ARG INSTALL_DIR=/opt
 ARG PULP_TOOLCHAIN_RELEASE=0.12.0
+ARG SNITCH_SPIKE_SHA=fd3f3da0d0ad9a3dd2f8283c4c3d874900aa8a47
 
 FROM alpine:3.18 as toolchain-build
 
@@ -135,6 +136,23 @@ RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
 RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/
 RUN strip $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt
 
+FROM alpine:3.18 as spike-build
+
+ARG INSTALL_DIR
+ARG SNITCH_SPIKE_SHA
+
+ENV CFLAGS=-static
+ENV CXXFLAGS=-static
+ENV LDFLAGS=-static
+
+RUN apk update && apk add --no-cache git autoconf make musl-dev clang dtc
+
+RUN git clone https://github.com/opencompl/riscv-isa-sim && cd riscv-isa-sim && git checkout $SNITCH_SPIKE_SHA
+RUN cd riscv-isa-sim && ./configure --with-target=riscv32-unknown-elf --with-isa=RV32IMAFD --prefix=$INSTALL_DIR && \
+    make -j$(nproc) && make install
+RUN strip $INSTALL_DIR/bin/spike
+RUN strip $INSTALL_DIR/bin/spike-dasm
+
 FROM alpine:3.18
 
 ARG INSTALL_DIR
@@ -143,3 +161,5 @@ COPY --from=toolchain-build $INSTALL_DIR/quidditch-toolchain $INSTALL_DIR/quiddi
 COPY --from=bender-build $INSTALL_DIR/quidditch-toolchain/bin/bender $INSTALL_DIR/quidditch-toolchain/bin
 COPY --from=pulp-build $INSTALL_DIR/quidditch-toolchain/bin/pulp-as $INSTALL_DIR/quidditch-toolchain/bin
 COPY --from=verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin
+COPY --from=spike-build $INSTALL_DIR/bin/spike $INSTALL_DIR/quidditch-toolchain/bin
+COPY --from=spike-build $INSTALL_DIR/bin/spike-dasm $INSTALL_DIR/quidditch-toolchain/bin
