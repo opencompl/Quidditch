@@ -61,6 +61,7 @@ function(quidditch_module)
   # TODO: xDSL cannot deal with anything but f64 right now.
   list(APPEND _COMPILER_ARGS "--iree-opt-demote-f64-to-f32=0")
 
+  set(_EXTRA_DEPENDS)
   if (_RULE_LLVM)
     list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=llvm-cpu")
     list(APPEND _COMPILER_ARGS "--iree-llvmcpu-debug-symbols=false")
@@ -76,6 +77,9 @@ function(quidditch_module)
     list(APPEND _COMPILER_ARGS "--iree-quidditch-static-library-output-path=${_O_FILE_NAME}")
     list(APPEND _COMPILER_ARGS "--iree-quidditch-xdsl-opt-path=${XDSL_OPT_PATH}")
     list(APPEND _COMPILER_ARGS "--iree-quidditch-toolchain-root=${QUIDDITCH_TOOLCHAIN_ROOT}")
+
+    list(APPEND _EXTRA_DEPENDS "${XDSL_OPT_PATH}")
+    list(APPEND _EXTRA_DEPENDS "${QUIDDITCH_TOOLCHAIN_ROOT}/bin/pulp-as")
   endif ()
 
   list(APPEND _COMPILER_ARGS "--output-format=vm-c")
@@ -91,7 +95,7 @@ function(quidditch_module)
   add_custom_command(
       OUTPUT ${_OUTPUT_FILES}
       COMMAND ${IREE_COMPILE_PATH} ${_COMPILER_ARGS}
-      DEPENDS ${IREE_COMPILE_PATH} ${_MLIR_SRC}
+      DEPENDS ${IREE_COMPILE_PATH} ${_MLIR_SRC} ${_EXTRA_DEPENDS}
   )
 
   add_library(${_MODULE_NAME}
