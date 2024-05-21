@@ -12,8 +12,8 @@ target_link_libraries(
     iree::modules::hal
     iree::modules::hal::types
     iree::hal::local::local
-    iree::hal::local::loaders::static_library_loader
-    Quidditch::device
+    Quidditch::device::device
+    Quidditch::loader::loader
     simple_add_module
 )
 

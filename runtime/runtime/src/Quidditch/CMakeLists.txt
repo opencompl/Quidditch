@@ -1,21 +1,5 @@
-add_subdirectory(registration)
-
-iree_cc_library(
-    NAME
-    device
-    SRCS
-    device.c
-    event.c
-    semaphore.c
-    DEPS
-    snRuntime
-    iree::base
-    iree::base::internal
-    iree::base::internal::arena
-    iree::base::internal::synchronization
-    iree::hal::utils::deferred_command_buffer
-    iree::hal::utils::file_transfer
-    iree::hal::utils::memory_file
-    iree::hal::utils::semaphore_base
-    PUBLIC
-)
+add_subdirectory(command_buffer)
+add_subdirectory(device)
+add_subdirectory(dispatch)
+add_subdirectory(executable)
+add_subdirectory(loader)

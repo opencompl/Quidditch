@@ -48,7 +48,14 @@ ssize_t write(int file, const void *ptr, size_t len) {
   return old_len;
 }
 
-void *sbrk(ptrdiff_t incr) { return snrt_l3alloc(incr); }
+extern uint8_t _edram;
+static uint8_t *heap = &_edram;
+
+void *sbrk(ptrdiff_t incr) {
+  uint8_t *result = heap;
+  heap += incr;
+  return result;
+}
 
 void _exit(int exitCode) {
   asm volatile("wfi");

@@ -10,11 +10,11 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "Quidditch/command_buffer/command_buffer.h"
 #include "event.h"
 #include "iree/base/internal/arena.h"
 #include "iree/base/internal/cpu.h"
 #include "iree/hal/local/executable_environment.h"
-#include "iree/hal/local/inline_command_buffer.h"
 #include "iree/hal/local/local_executable_cache.h"
 #include "iree/hal/local/local_pipeline_layout.h"
 #include "iree/hal/utils/deferred_command_buffer.h"
@@ -233,7 +233,7 @@ static iree_status_t quidditch_device_create_command_buffer(
     iree_hal_command_buffer_t** out_command_buffer) {
   if (iree_all_bits_set(mode,
                         IREE_HAL_COMMAND_BUFFER_MODE_ALLOW_INLINE_EXECUTION)) {
-    return iree_hal_inline_command_buffer_create(
+    return quidditch_command_buffer_create(
         base_device, mode, command_categories, queue_affinity, binding_capacity,
         iree_hal_device_host_allocator(base_device), out_command_buffer);
   } else {
@@ -353,8 +353,8 @@ static iree_status_t quidditch_device_apply_deferred_command_buffers(
   // the deferred command buffers. We want to reset it between each apply so
   // that we don't get state carrying across.
   iree_byte_span_t storage =
-      iree_make_byte_span(iree_alloca(iree_hal_inline_command_buffer_size()),
-                          iree_hal_inline_command_buffer_size());
+      iree_make_byte_span(iree_alloca(quidditch_command_buffer_size()),
+                          quidditch_command_buffer_size());
 
   // NOTE: we ignore any inline command buffers that may be passed in as they've
   // already executed during recording. The caller is probably in for a bad time
@@ -363,7 +363,7 @@ static iree_status_t quidditch_device_apply_deferred_command_buffers(
     iree_hal_command_buffer_t* command_buffer = command_buffers[i];
     if (iree_hal_deferred_command_buffer_isa(command_buffer)) {
       iree_hal_command_buffer_t* inline_command_buffer = NULL;
-      IREE_RETURN_IF_ERROR(iree_hal_inline_command_buffer_initialize(
+      IREE_RETURN_IF_ERROR(quidditch_command_buffer_initialize(
           (iree_hal_device_t*)device,
           iree_hal_command_buffer_mode(command_buffer) |
               IREE_HAL_COMMAND_BUFFER_MODE_ALLOW_INLINE_EXECUTION,
@@ -373,7 +373,7 @@ static iree_status_t quidditch_device_apply_deferred_command_buffers(
       iree_status_t status = iree_hal_deferred_command_buffer_apply(
           command_buffer, inline_command_buffer,
           iree_hal_buffer_binding_table_empty());
-      iree_hal_inline_command_buffer_deinitialize(inline_command_buffer);
+      quidditch_command_buffer_deinitialize(inline_command_buffer);
       IREE_RETURN_IF_ERROR(status);
     }
   }

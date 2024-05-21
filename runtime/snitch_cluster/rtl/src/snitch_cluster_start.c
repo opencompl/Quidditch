@@ -4,8 +4,6 @@
 
 #define SNRT_INIT_TLS
 #define SNRT_INIT_BSS
-#define SNRT_INIT_CLS
-#define SNRT_INIT_LIBS
 #define SNRT_CRT0_PRE_BARRIER
 #define SNRT_INVOKE_MAIN
 #define SNRT_CRT0_POST_BARRIER

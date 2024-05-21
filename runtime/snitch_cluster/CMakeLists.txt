@@ -55,14 +55,12 @@ add_library(snRuntime
     ${runtime_dir}/src/snrt.c
     ${runtime_dir}/src/syscalls.c
 )
-target_include_directories(snRuntime PRIVATE
-    ${snRuntimeSrc}/target/snitch_cluster/sw/runtime/common/
-    ${snRuntimeSrc}/sw/snRuntime/src
-    ${snRuntimeSrc}/sw/snRuntime/src/omp
-    ${header_dir}
+target_include_directories(snRuntime
     PUBLIC
+    ${snRuntimeSrc}/sw/snRuntime/src
+    ${header_dir}
+    ${snRuntimeSrc}/target/snitch_cluster/sw/runtime/common/
     ${snRuntimeSrc}/sw/snRuntime/api
-    ${snRuntimeSrc}/sw/snRuntime/api/omp
 )
 add_dependencies(snRuntime cluster_gen snitch_cluster_peripheral.h)
 target_link_options(snRuntime INTERFACE -Tbase.ld)
