@@ -8,20 +8,7 @@
 #include "dma.c"
 #include "printf.c"
 #include "riscv.c"
+#include "snitch_cluster_memory.c"
 #include "snitch_cluster_start.c"
 #include "sync.c"
 #include "team.c"
-
-// TODO: Remove declarations that are workarounds until
-//  https://github.com/pulp-platform/snitch_cluster/pull/136 landed.
-
-extern uint32_t snrt_l1_start_addr();
-extern uint32_t snrt_l1_end_addr();
-
-extern volatile uint32_t *snrt_zero_memory_ptr();
-
-extern uint32_t snrt_global_all_to_all_reduction(uint32_t value);
-
-extern uint32_t snrt_global_compute_core_num();
-
-extern uint32_t snrt_global_compute_core_idx();
