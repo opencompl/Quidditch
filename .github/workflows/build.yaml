@@ -18,11 +18,13 @@ jobs:
         with:
           submodules: true
 
-      - run: |
-          cd iree
+      - name: Checkout submodules' submodules
+        run: |
           # Checkout IREE's submodule but not the submodules of IREE's submodules!
           # This saves us cloning LLVM twice.
-          git submodule update --init
+          # If we were lazy we could just clone recursively.
+          cd iree && git submodule update --init --force --depth=1
+          cd snitch_cluster && git submodule update --init --force --depth=1
 
       - name: Set up Python
         uses: actions/setup-python@v5
