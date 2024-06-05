@@ -113,7 +113,9 @@ iree_status_t run_model(const model_config_t* config) {
 
   for (iree_host_size_t i = 0; i < config->num_inputs; i++) {
     iree_const_byte_span_t span = iree_make_const_byte_span(
-        config->input_data[i], config->input_sizes[i] * sizeof(double));
+        config->input_data[i],
+        config->input_sizes[i] *
+            iree_hal_element_dense_byte_count(config->element_type));
 
     iree_hal_buffer_params_t params = {
         .usage = IREE_HAL_BUFFER_USAGE_DISPATCH_STORAGE,
@@ -125,7 +127,7 @@ iree_status_t run_model(const model_config_t* config) {
     iree_hal_buffer_view_t* buffer = NULL;
     result = iree_hal_buffer_view_allocate_buffer_copy(
         device, iree_hal_device_allocator(device), config->input_ranks[i],
-        config->input_shapes[i], IREE_HAL_ELEMENT_TYPE_FLOAT_64,
+        config->input_shapes[i], config->element_type,
         IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR, params, span, &buffer);
     if (!iree_status_is_ok(result)) goto error_release_context;
 
@@ -156,7 +158,9 @@ iree_status_t run_model(const model_config_t* config) {
 
     iree_hal_device_transfer_d2h(
         device, iree_hal_buffer_view_buffer(ret_buffer_view), 0,
-        config->output_data[i], config->output_sizes[i] * sizeof(double),
+        config->output_data[i],
+        config->output_sizes[i] *
+            iree_hal_element_dense_byte_count(config->element_type),
         IREE_HAL_TRANSFER_BUFFER_FLAG_DEFAULT, iree_infinite_timeout());
   }
 

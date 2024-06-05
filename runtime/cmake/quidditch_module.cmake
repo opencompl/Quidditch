@@ -42,6 +42,15 @@ find_program(XDSL_OPT_PATH xdsl-opt
     REQUIRED
 )
 
+# Compiles an IREE MLIR file given by the 'SRC' argument to a static library
+# suitable for use with quidditch's and IREE's static library loader.
+# Uses the Quidditch backend by default unless the 'LLVM' flag is given.
+# Options listed under 'FLAGS' are passed to 'iree-compile' directly.
+# Targets or files listed after 'DEPENDS' are added as input dependencies to the
+# the compile command.
+#
+# The resulting library is the source file's name with the extension removed and
+# '_module' appended.
 function(quidditch_module)
   cmake_parse_arguments(_RULE "LLVM" "SRC" "FLAGS;DEPENDS" ${ARGN})
 
@@ -61,7 +70,7 @@ function(quidditch_module)
   # TODO: xDSL cannot deal with anything but f64 right now.
   list(APPEND _COMPILER_ARGS "--iree-opt-demote-f64-to-f32=0")
 
-  set(_EXTRA_DEPENDS)
+  set(_EXTRA_DEPENDS ${_RULE_DEPENDS})
   if (_RULE_LLVM)
     list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=llvm-cpu")
     list(APPEND _COMPILER_ARGS "--iree-llvmcpu-debug-symbols=false")
@@ -69,8 +78,10 @@ function(quidditch_module)
     list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-cpu=generic-rv32")
     list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-cpu-features=+m,+f,+d,+zfh")
     list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-abi=ilp32d")
+    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-float-abi=hard")
     list(APPEND _COMPILER_ARGS "--iree-llvmcpu-link-embedded=false")
     list(APPEND _COMPILER_ARGS "--iree-llvmcpu-link-static")
+    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-number-of-threads=8")
     list(APPEND _COMPILER_ARGS "--iree-llvmcpu-static-library-output-path=${_O_FILE_NAME}")
   else ()
     list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=quidditch")
