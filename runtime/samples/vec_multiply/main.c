@@ -1,8 +1,7 @@
 #include <simple_add.h>
 #include <simple_add_module.h>
 #include <team_decls.h>
-
-#include "util/run_model.h"
+#include <util/run_model.h>
 
 int main() {
   double data[4];
@@ -19,8 +18,10 @@ int main() {
       .module_constructor = test_simple_add_create,
       .main_function = iree_make_cstring_view("test_simple_add.add"),
 
+      .element_type = IREE_HAL_ELEMENT_TYPE_FLOAT_64,
+
       .num_inputs = 2,
-      .input_data = (const double*[]){data, data},
+      .input_data = (const void*[]){data, data},
       .input_sizes = (const iree_host_size_t[]){IREE_ARRAYSIZE(data),
                                                 IREE_ARRAYSIZE(data)},
       .input_ranks = (const iree_host_size_t[]){1, 1},
@@ -29,7 +30,7 @@ int main() {
                                     (iree_hal_dim_t[]){IREE_ARRAYSIZE(data)}},
 
       .num_outputs = 1,
-      .output_data = (double*[]){data},
+      .output_data = (void*[]){data},
       .output_sizes = (const iree_host_size_t[]){IREE_ARRAYSIZE(data)},
       .device_allocator = l1_allocator(),
   };

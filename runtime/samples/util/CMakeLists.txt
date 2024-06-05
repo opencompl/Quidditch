@@ -13,3 +13,4 @@ target_link_libraries(
     Quidditch::device::device
     Quidditch::loader::loader
 )
+target_include_directories(samples_util INTERFACE ${CMAKE_CURRENT_LIST_DIR}/..)
