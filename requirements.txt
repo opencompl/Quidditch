@@ -1,4 +1,4 @@
 -r codegen/requirements.txt
 -r runtime/requirements.txt
--r runtime/samples/nsnet2_llvm/requirements.txt
+-r runtime/samples/nsnet2/requirements.txt
 -e xdsl
