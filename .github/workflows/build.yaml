@@ -16,12 +16,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+
+      - run: |
+          cd iree
+          # Checkout IREE's submodule but not the submodules of IREE's submodules!
+          # This saves us cloning LLVM twice.
+          git submodule update --init
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: 3.11
+          cache: 'pip'
+          cache-dependency-path: |
+            ./runtime/**/requirements.txt
+            ./codegen/**/requirements.txt
+            ./requirements.txt
+            ./xdsl
 
       - name: Install minimum required cmake and ninja
         uses: lukka/get-cmake@latest
@@ -38,7 +50,7 @@ jobs:
       - name: Install Native Compilers
         run: |
           sudo apt-get update
-          sudo apt-get install lld clang cargo
+          sudo apt-get install lld clang
 
       - name: Install Quidditch Toolchain
         run: |
