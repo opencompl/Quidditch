@@ -16,12 +16,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: true
+
+      - name: Checkout submodules' submodules
+        run: |
+          # Checkout IREE's submodule but not the submodules of IREE's submodules!
+          # This saves us cloning LLVM twice.
+          # If we were lazy we could just clone recursively.
+          cd ${{github.workspace}}/iree && git submodule update --init --force --depth=1
+          cd ${{github.workspace}}/snitch_cluster && git submodule update --init --force --depth=1
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: 3.11
+          cache: 'pip'
+          cache-dependency-path: |
+            ./runtime/**/requirements.txt
+            ./codegen/**/requirements.txt
+            ./requirements.txt
+            ./xdsl
 
       - name: Install minimum required cmake and ninja
         uses: lukka/get-cmake@latest
@@ -38,7 +52,7 @@ jobs:
       - name: Install Native Compilers
         run: |
           sudo apt-get update
-          sudo apt-get install lld clang cargo
+          sudo apt-get install lld clang
 
       - name: Install Quidditch Toolchain
         run: |
