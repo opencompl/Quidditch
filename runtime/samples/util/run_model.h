@@ -20,10 +20,12 @@ typedef struct {
   /// Main function that should be called.
   iree_string_view_t main_function;
 
+  iree_hal_element_type_t element_type;
+
   /// Number of input tensors.
   iree_host_size_t num_inputs;
   /// Input tensor data in dense row major encoding.
-  const double** input_data;
+  const void** input_data;
   /// Number of elements for each input in 'input_data'.
   const iree_host_size_t* input_sizes;
   /// Ranks of each input tensor.
@@ -34,7 +36,7 @@ typedef struct {
   /// Number of output tensors.
   iree_host_size_t num_outputs;
   /// Memory for the output data.
-  double** output_data;
+  void** output_data;
   /// Number of elements for each array in 'output_data'.
   const iree_host_size_t* output_sizes;
 

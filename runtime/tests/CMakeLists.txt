@@ -10,4 +10,4 @@ macro(test_executable target_name)
 endmacro()
 
 test_executable(HelloWorld)
-test_executable(IREE_HelloWorld)
+test_executable(vec_multiply)
