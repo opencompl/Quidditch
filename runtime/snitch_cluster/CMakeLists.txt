@@ -5,12 +5,9 @@ find_package(Python3 REQUIRED)
 # Required for finding regtool.
 find_program(BENDER_PATH NAMES bender REQUIRED)
 
-set(SNITCH_RUNTIME_TARGET "rtl" CACHE STRING "Snitch runtime target to use")
-
 set(snRuntimeSrc ${SNITCH_CLUSTER_SOURCE_DIR})
 set(header_dir ${CMAKE_CURRENT_BINARY_DIR}/cluster_gen)
 set(config_file ${snRuntimeSrc}/target/snitch_cluster/cfg/default.hjson)
-set(runtime_dir ${CMAKE_CURRENT_LIST_DIR}/${SNITCH_RUNTIME_TARGET})
 
 # Get the path of regtool from bender. This will additionally automatically
 # install it.
@@ -49,25 +46,40 @@ endmacro()
 run_cluster_gen(${snRuntimeSrc}/target/snitch_cluster/sw/runtime/common/snitch_cluster_addrmap.h.tpl)
 run_cluster_gen(${snRuntimeSrc}/target/snitch_cluster/sw/runtime/common/snitch_cluster_cfg.h.tpl)
 
+add_custom_target(snRuntimeConfig)
+add_dependencies(snRuntimeConfig cluster_gen snitch_cluster_peripheral.h)
 
-add_library(snRuntime
-    ${runtime_dir}/src/snitch_cluster_start.S
-    ${runtime_dir}/src/snrt.c
-    ${runtime_dir}/src/syscalls.c
+# Interface abstraction into the snitch runtime that any library user should be
+# using. It is guaranteed not to leak any hardware details.
+add_library(snRuntimeInterface INTERFACE)
+target_include_directories(snRuntimeInterface
+    INTERFACE
+    ${snRuntimeSrc}/sw/snRuntime/api
+    ${snRuntimeSrc}/sw/deps/riscv-opcodes
+    ${CMAKE_CURRENT_LIST_DIR}/api
 )
+# Required while snRuntime uses 'inline' qualifiers for declarations.
+target_compile_options(snRuntimeInterface INTERFACE -Wno-undefined-inline)
+
+# Default implementation of the snitch runtime that executables should link
+# against.
+add_library(snRuntime
+    rtl/src/snitch_cluster_start.S
+    rtl/src/snrt.c
+    rtl/src/syscalls.c
+)
+target_link_libraries(snRuntime PUBLIC snRuntimeInterface)
 target_include_directories(snRuntime
-    PUBLIC
+    PRIVATE
     ${snRuntimeSrc}/sw/snRuntime/src
     ${header_dir}
     ${snRuntimeSrc}/target/snitch_cluster/sw/runtime/common/
-    ${snRuntimeSrc}/sw/snRuntime/api
 )
-add_dependencies(snRuntime cluster_gen snitch_cluster_peripheral.h)
+add_dependencies(snRuntime snRuntimeConfig)
 target_link_options(snRuntime INTERFACE -Tbase.ld)
 target_link_directories(snRuntime
     INTERFACE
+    # For linker scripts.
     ${snRuntimeSrc}/sw/snRuntime
-    ${runtime_dir}
+    rtl
 )
-# Required while snRuntime uses 'inline' qualifiers for declarations.
-target_compile_options(snRuntime PRIVATE -Wno-undefined-inline)

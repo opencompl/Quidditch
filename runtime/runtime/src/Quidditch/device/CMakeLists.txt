@@ -8,7 +8,6 @@ iree_cc_library(
     event.c
     semaphore.c
     DEPS
-    snRuntime
     iree::base
     iree::base::internal
     iree::base::internal::arena

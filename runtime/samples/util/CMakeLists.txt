@@ -6,7 +6,7 @@ target_link_libraries(
     iree::base
     iree::vm
     PRIVATE
-    snRuntime
+    snRuntimeInterface
     iree::modules::hal
     iree::modules::hal::types
     iree::hal::local::local

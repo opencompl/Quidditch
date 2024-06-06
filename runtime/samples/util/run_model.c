@@ -10,7 +10,7 @@
 #include <iree/modules/hal/types.h>
 #include <iree/vm/instance.h>
 
-#include <snitch_cluster_defs.h>
+#include <stack_decls.h>
 #include <team_decls.h>
 
 iree_allocator_t l1_allocator() {
@@ -21,7 +21,7 @@ iree_allocator_t l1_allocator() {
 
   l1_arena.buffer = (uint8_t*)snrt_l1_start_addr();
   l1_arena.length = 0;
-  unsigned stack_size_per_core = 1 << SNRT_LOG2_STACK_SIZE;
+  unsigned stack_size_per_core = snrt_get_stack_size_per_core();
   l1_arena.capacity =
       (snrt_l1_end_addr() - snrt_cluster_core_num() * stack_size_per_core) -
       snrt_l1_start_addr();

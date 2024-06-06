@@ -5,7 +5,7 @@ iree_cc_library(
     SRCS
     dispatch.c
     DEPS
-    snRuntime
+    snRuntimeInterface
     iree::base
     PUBLIC
 )
