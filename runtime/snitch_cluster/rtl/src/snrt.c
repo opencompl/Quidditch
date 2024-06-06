@@ -10,5 +10,8 @@
 #include "riscv.c"
 #include "snitch_cluster_memory.c"
 #include "snitch_cluster_start.c"
+#include "stack_decls.h"
 #include "sync.c"
 #include "team.c"
+
+uint32_t snrt_get_stack_size_per_core() { return 1 << SNRT_LOG2_STACK_SIZE; }

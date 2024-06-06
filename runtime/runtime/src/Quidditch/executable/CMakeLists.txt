@@ -7,7 +7,7 @@ iree_cc_library(
     SRCS
     "executable.c"
     DEPS
-    snRuntime
+    snRuntimeInterface
     Quidditch::dispatch::dispatch
     iree::base
     iree::hal::local::executable_library

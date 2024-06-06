@@ -3,8 +3,8 @@
 
 #include <assert.h>
 #include <cluster_interrupt_decls.h>
-#include <riscv.h>
-#include <snitch_cluster_defs.h>
+#include <encoding.h>
+#include <riscv_decls.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -46,8 +46,8 @@ void quidditch_dispatch_wait_for_workers() {
 static iree_hal_executable_dispatch_v0_t configuredKernel;
 static const iree_hal_executable_environment_v0_t* configuredEnvironment;
 static const iree_hal_executable_dispatch_state_v0_t* configuredDispatchState;
-static iree_alignas(64) iree_hal_executable_workgroup_state_v0_t
-    configuredWorkgroupState[SNRT_CLUSTER_CORE_NUM - 1];
+static iree_alignas(64)
+    iree_hal_executable_workgroup_state_v0_t configuredWorkgroupState[8];
 static atomic_bool error = false;
 
 bool quidditch_dispatch_errors_occurred() { return error; }

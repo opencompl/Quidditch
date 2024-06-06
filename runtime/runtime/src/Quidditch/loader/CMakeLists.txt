@@ -5,7 +5,6 @@ iree_cc_library(
     SRCS
     loader.c
     DEPS
-    snRuntime
     iree::base
     Quidditch::executable::executable
     PUBLIC

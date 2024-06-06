@@ -7,7 +7,6 @@ iree_cc_library(
     SRCS
     "command_buffer.c"
     DEPS
-    snRuntime
     iree::base
     iree::base::internal
     iree::base::internal::cpu
