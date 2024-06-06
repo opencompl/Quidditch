@@ -73,7 +73,7 @@ function(quidditch_module)
   set(_EXTRA_DEPENDS ${_RULE_DEPENDS})
   if (_RULE_LLVM)
     list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=llvm-cpu")
-    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-debug-symbols=false")
+    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-debug-symbols=true")
     list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-triple=riscv32-unknown-elf")
     list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-cpu=generic-rv32")
     list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-cpu-features=+m,+f,+d,+zfh")
@@ -121,3 +121,24 @@ function(quidditch_module)
       LINKER_LANGUAGE C
   )
 endfunction()
+
+# Use iree-turbine to convert a PyTorch model to MLIR.
+# 'SRC' should be the path to the python file, 'DTYPE' one of "f32" or "F64" and
+# 'DST' the path to the output file.
+# The python script should take one positional argument, which is the 'DST'
+# argument and output the MLIR file there. Additionally the 'DTYPE' flag is
+# communicated via a `--dtype=` flag.
+macro(iree_turbine)
+  cmake_parse_arguments(_RULE "" "SRC;DTYPE;DST" "" ${ARGN})
+
+  cmake_path(GET _RULE_SRC STEM filename)
+  cmake_path(ABSOLUTE_PATH _RULE_SRC BASE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_VARIABLE source_path)
+
+  add_custom_command(
+      OUTPUT ${_RULE_DST}
+      COMMAND ${Python3_EXECUTABLE} ${source_path} ${_RULE_DST} --dtype=${_RULE_DTYPE}
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+      DEPENDS ${_RULE_SRC}
+      COMMENT "Translating ${filename} using iree-turbine"
+  )
+endmacro()
