@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 project(Quidditch C CXX)
 
-set(QUIDDITCH_TOOLCHAIN_FILE "" CACHE STRING "Path to the quidditch toolchain's toolchain file")
+set(QUIDDITCH_TOOLCHAIN_FILE "" CACHE FILEPATH "Path to the quidditch toolchain's toolchain file")
 set(OVERRIDE_VENV OFF CACHE BOOL "")
 cmake_path(REMOVE_FILENAME QUIDDITCH_TOOLCHAIN_FILE OUTPUT_VARIABLE QUIDDITCH_TOOLCHAIN_ROOT)
 
