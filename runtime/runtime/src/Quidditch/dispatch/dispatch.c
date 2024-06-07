@@ -1,16 +1,17 @@
 
 #include "dispatch.h"
 
+#include <iree/base/alignment.h>
+
 #include <assert.h>
 #include <cluster_interrupt_decls.h>
 #include <encoding.h>
 #include <riscv_decls.h>
+#include <ssr_decls.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <team_decls.h>
-
-#include "iree/base/alignment.h"
 
 // TODO: This should be cluster local.
 static struct worker_metadata_t {
@@ -67,10 +68,17 @@ int quidditch_dispatch_enter_worker_loop() {
   while (!worker_metadata.exit) {
     park_worker();
     if (worker_metadata.exit) break;
-
+    
+    read_csr(mcycle);
     if (configuredKernel(configuredEnvironment, configuredDispatchState,
                          &configuredWorkgroupState[snrt_cluster_core_idx()]))
       error = true;
+
+    // Required to make sure that we only read the mcycle once the FPU has
+    // actually finished. Otherwise, we are measuring cycles that are too short!
+    // This is only required for measurement, not in real programs.
+    snrt_fpu_fence();
+    read_csr(mcycle);
   }
 
   snrt_interrupt_disable(IRQ_M_CLUSTER);

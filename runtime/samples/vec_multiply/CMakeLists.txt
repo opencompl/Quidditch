@@ -7,5 +7,6 @@ target_link_libraries(
     samples_util
     simple_add_module
     snRuntime
+    Quidditch::dispatch::dispatch
 )
 

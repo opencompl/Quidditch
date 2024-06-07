@@ -71,12 +71,6 @@ error_release_vm:
 }
 
 iree_status_t run_model(const model_config_t* config) {
-  if (!snrt_is_dm_core()) {
-    int ret = quidditch_dispatch_enter_worker_loop();
-    if (!ret) return iree_ok_status();
-    return iree_make_status(IREE_STATUS_UNKNOWN);
-  }
-
   iree_allocator_t host_allocator = iree_allocator_system();
 
   iree_vm_instance_t* vmInstance;

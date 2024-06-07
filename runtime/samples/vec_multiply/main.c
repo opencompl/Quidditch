@@ -1,3 +1,5 @@
+#include <Quidditch/dispatch/dispatch.h>
+
 #include <simple_add.h>
 #include <simple_add_module.h>
 #include <team_decls.h>
@@ -5,6 +7,7 @@
 
 int main() {
   double data[4];
+  if (!snrt_is_dm_core()) return quidditch_dispatch_enter_worker_loop();
 
   for (int i = 0; i < IREE_ARRAYSIZE(data); i++) {
     data[i] = (i + 1);
