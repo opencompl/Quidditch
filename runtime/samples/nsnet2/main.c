@@ -1,9 +1,13 @@
+#include <Quidditch/dispatch/dispatch.h>
+
 #include <nsnet2.h>
 #include <nsnet2_module.h>
 #include <team_decls.h>
 #include <util/run_model.h>
 
 int main() {
+  if (!snrt_is_dm_core()) return quidditch_dispatch_enter_worker_loop();
+
   float data[161];
 
   for (int i = 0; i < IREE_ARRAYSIZE(data); i++) {
