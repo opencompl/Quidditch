@@ -20,8 +20,6 @@ execute_process(
     COMMAND "${Python3_EXECUTABLE}" -m pip install -r ${CMAKE_CURRENT_LIST_DIR}/requirements.txt
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR} COMMAND_ERROR_IS_FATAL ANY)
 
-find_program(CARGO_PATH cargo REQUIRED DOC "Path to cargo required to build bender")
-
 include(ExternalProject)
 
 macro(append_if_defined list variable)
