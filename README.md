@@ -16,7 +16,8 @@ Afterward, you can perform a mega build using:
 git clone --recursive https://github.com/opencompl/quidditch
 cd quidditch
 
-docker run --rm ghcr.io/opencompl/Quidditch/toolchain:main tar -cC /opt/quidditch-toolchain .\
+mkdir toolchain
+docker run --rm ghcr.io/opencompl/quidditch/toolchain:main tar -cC /opt/quidditch-toolchain .\
  | tar -xC ./toolchain
 
 python -m venv venv
