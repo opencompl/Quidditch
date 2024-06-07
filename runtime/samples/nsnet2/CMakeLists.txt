@@ -9,4 +9,5 @@ target_link_libraries(
     samples_util
     nsnet2_module
     snRuntime
+    Quidditch::dispatch::dispatch
 )
