@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <cluster_interrupt_decls.h>
 #include <encoding.h>
-#include <perf_decls.h>
 #include <riscv_decls.h>
 #include <ssr_decls.h>
 #include <stdatomic.h>
