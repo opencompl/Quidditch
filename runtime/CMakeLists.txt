@@ -4,9 +4,9 @@ project(QuidditchRuntime LANGUAGES C ASM)
 
 set(CMAKE_C_STANDARD 11)
 
-set(IREE_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../iree" CACHE STRING "IREE source code path")
-set(SNITCH_CLUSTER_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../snitch_cluster" CACHE STRING "snitch_cluster source code path")
-set(QUIDDITCH_CODEGEN_BUILD_DIR "" CACHE STRING "CMake generation directory with a compiled 'iree-compile'")
+set(IREE_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../iree" CACHE PATH "IREE source code path")
+set(SNITCH_CLUSTER_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../snitch_cluster" CACHE PATH "snitch_cluster source code path")
+set(QUIDDITCH_CODEGEN_BUILD_DIR "" CACHE PATH "CMake generation directory with a compiled 'iree-compile'")
 
 list(APPEND CMAKE_MODULE_PATH
         ${CMAKE_CURRENT_LIST_DIR}/cmake/
