@@ -1,5 +1,7 @@
 include(CTest)
 
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
 # Sanity check that our toolchain, emulator etc. work
 add_executable(HelloWorld main.c)
 target_link_libraries(HelloWorld snRuntime)
