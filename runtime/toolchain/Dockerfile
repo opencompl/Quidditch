@@ -108,33 +108,57 @@ RUN strip $INSTALL_DIR/quidditch-toolchain/bin/pulp-as
 
 FROM alpine:3.18 as verilator-build
 
-ARG SNITCH_CLUSTER_SHA
 ARG VERILATOR_RELEASE
 ARG INSTALL_DIR
 
 WORKDIR $INSTALL_DIR
 
-RUN apk update && apk add --no-cache py3-pip git autoconf flex-dev bison make musl-dev clang coreutils dtc patch
+RUN apk update && apk add --no-cache py3-pip git autoconf flex-dev bison make musl-dev clang coreutils dtc
 
 ENV PATH=/root:$PATH
 COPY --from=bender-build $INSTALL_DIR/quidditch-toolchain/bin/bender /root
+
+# snitch_cluster repo does not yet support Verilator 5, see: https://github.com/pulp-platform/snitch_cluster/pull/76.
+ENV VERILATOR_ROOT=$INSTALL_DIR/verilator
+RUN git clone --depth 1 https://github.com/verilator/verilator -b $VERILATOR_RELEASE
+RUN cd verilator && autoconf && CC=clang CXX=clang++ ./configure && make -j$(nproc)
+
+FROM alpine:3.18 as snitch-verilator-build-base
+
+ARG SNITCH_CLUSTER_SHA
+ARG INSTALL_DIR
+
+COPY --from=bender-build $INSTALL_DIR/quidditch-toolchain/bin/bender /root
+COPY --from=verilator-build $INSTALL_DIR/verilator $INSTALL_DIR/verilator
+
+WORKDIR $INSTALL_DIR
+
+ENV PATH=/root:$PATH
+ENV VERILATOR_ROOT=$INSTALL_DIR/verilator
+ENV VLT=$VERILATOR_ROOT/bin/verilator
+
+RUN apk update && apk add --no-cache py3-pip git make musl-dev clang coreutils patch perl dtc
 
 COPY requirements.txt /root/
 RUN pip install --break-system-packages -r /root/requirements.txt
 RUN git clone https://github.com/pulp-platform/snitch_cluster && \
     cd snitch_cluster && git checkout $SNITCH_CLUSTER_SHA && git submodule update --init --recursive
 
-# snitch_cluster repo does not yet support Verilator 5, see: https://github.com/pulp-platform/snitch_cluster/pull/76.
-ENV VERILATOR_ROOT=$INSTALL_DIR/verilator
-RUN git clone --depth 1 https://github.com/verilator/verilator -b $VERILATOR_RELEASE
-RUN cd verilator && autoconf && CC=clang CXX=clang++ ./configure && make -j$(nproc)
-ENV VLT=$VERILATOR_ROOT/bin/verilator
+FROM snitch-verilator-build-base as snitch-verilator-build
+
 RUN cd ./snitch_cluster/target/snitch_cluster && \
     make VLT_USE_LLVM=ON LDFLAGS=-static bin/snitch_cluster.vlt -j$(nproc)
-
 RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
 RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/
 RUN strip $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt
+
+FROM snitch-verilator-build-base as snitch-fdiv-verilator-build
+
+RUN cd ./snitch_cluster/target/snitch_cluster && \
+    make CFG_OVERRIDE=cfg/fdiv.hjson VLT_USE_LLVM=ON LDFLAGS=-static bin/snitch_cluster.vlt -j$(nproc)
+RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
+RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster_fdiv.vlt
+RUN strip $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster_fdiv.vlt
 
 FROM alpine:3.18 as spike-build
 
@@ -160,6 +184,7 @@ ARG INSTALL_DIR
 COPY --from=toolchain-build $INSTALL_DIR/quidditch-toolchain $INSTALL_DIR/quidditch-toolchain
 COPY --from=bender-build $INSTALL_DIR/quidditch-toolchain/bin/bender $INSTALL_DIR/quidditch-toolchain/bin
 COPY --from=pulp-build $INSTALL_DIR/quidditch-toolchain/bin/pulp-as $INSTALL_DIR/quidditch-toolchain/bin
-COPY --from=verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin
+COPY --from=snitch-verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin
+COPY --from=snitch-fdiv-verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster_fdiv.vlt $INSTALL_DIR/quidditch-toolchain/bin
 COPY --from=spike-build $INSTALL_DIR/bin/spike $INSTALL_DIR/quidditch-toolchain/bin
 COPY --from=spike-build $INSTALL_DIR/bin/spike-dasm $INSTALL_DIR/quidditch-toolchain/bin
