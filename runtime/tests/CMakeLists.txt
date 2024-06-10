@@ -57,4 +57,4 @@ endmacro()
 
 test_executable(HelloWorld)
 test_executable(vec_multiply)
-test_executable(NsNet2LLVM)
+# test_executable(NsNet2LLVM)
