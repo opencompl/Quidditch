@@ -78,8 +78,8 @@ def with_frames(n_frames):
 
     class CompiledNsNet2(aot.CompiledModule):
         # Make the hidden state globals that persist as long as the IREE session does.
-        state1 = aot.export_global(aot.AbstractTensor(1, 1, 400, dtype=dtype), mutable=True)
-        state2 = aot.export_global(aot.AbstractTensor(1, 1, 400, dtype=dtype), mutable=True)
+        state1 = aot.export_global(torch.zeros(1, 1, 400, dtype=dtype), mutable=True, uninitialized=False)
+        state2 = aot.export_global(torch.zeros(1, 1, 400, dtype=dtype), mutable=True, uninitialized=False)
 
         def main(self, x=aot.AbstractTensor(*size, dtype=dtype)):
             y, out1, out2 = aot.jittable(model.forward)(
