@@ -149,16 +149,16 @@ FROM snitch-verilator-build-base as snitch-verilator-build
 RUN cd ./snitch_cluster/target/snitch_cluster && \
     make VLT_USE_LLVM=ON LDFLAGS=-static bin/snitch_cluster.vlt -j$(nproc)
 RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
-RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/
-RUN strip $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt
+RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster_nofdiv.vlt
+RUN strip $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster_nofdiv.vlt
 
 FROM snitch-verilator-build-base as snitch-fdiv-verilator-build
 
 RUN cd ./snitch_cluster/target/snitch_cluster && \
     make CFG_OVERRIDE=cfg/fdiv.hjson VLT_USE_LLVM=ON LDFLAGS=-static bin/snitch_cluster.vlt -j$(nproc)
 RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
-RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster_fdiv.vlt
-RUN strip $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster_fdiv.vlt
+RUN cp ./snitch_cluster/target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/
+RUN strip $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt
 
 FROM alpine:3.18 as spike-build
 
@@ -184,7 +184,7 @@ ARG INSTALL_DIR
 COPY --from=toolchain-build $INSTALL_DIR/quidditch-toolchain $INSTALL_DIR/quidditch-toolchain
 COPY --from=bender-build $INSTALL_DIR/quidditch-toolchain/bin/bender $INSTALL_DIR/quidditch-toolchain/bin
 COPY --from=pulp-build $INSTALL_DIR/quidditch-toolchain/bin/pulp-as $INSTALL_DIR/quidditch-toolchain/bin
-COPY --from=snitch-verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin
-COPY --from=snitch-fdiv-verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster_fdiv.vlt $INSTALL_DIR/quidditch-toolchain/bin
+COPY --from=snitch-verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster_nofdiv.vlt $INSTALL_DIR/quidditch-toolchain/bin
+COPY --from=snitch-fdiv-verilator-build $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin
 COPY --from=spike-build $INSTALL_DIR/bin/spike $INSTALL_DIR/quidditch-toolchain/bin
 COPY --from=spike-build $INSTALL_DIR/bin/spike-dasm $INSTALL_DIR/quidditch-toolchain/bin
