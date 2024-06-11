@@ -116,7 +116,7 @@ public:
         IREE::HAL::ExecutableTargetAttr::get(context, "quidditch", "static"));
   }
 
-  void buildTranslationPassPipeline(IREE::HAL::ExecutableVariantOp variantOp,
+  void buildTranslationPassPipeline(IREE::HAL::ExecutableTargetAttr targetAttr,
                                     OpPassManager &passManager) override {
     OpPassManager &modulePassManager = passManager.nest<ModuleOp>();
 

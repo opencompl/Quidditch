@@ -1,4 +1,4 @@
-// RUN: iree-compile %s --iree-hal-target-backends=quidditch --iree-opt-demote-f64-to-f32=0 \
+// RUN: iree-compile %s --iree-hal-target-backends=quidditch --iree-input-demote-f64-to-f32=0 \
 // RUN:   --iree-quidditch-static-library-output-path=%t.o \
 // RUN:   --iree-quidditch-xdsl-opt-path=%xdsl-opt \
 // RUN:   --iree-quidditch-toolchain-root=%quidditch-toolchain-root \
