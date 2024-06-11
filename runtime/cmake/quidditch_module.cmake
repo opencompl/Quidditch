@@ -68,7 +68,7 @@ function(quidditch_module)
   list(APPEND _COMPILER_ARGS "--iree-vm-emit-polyglot-zip=false")
   list(APPEND _COMPILER_ARGS "--iree-input-type=auto")
   # TODO: xDSL cannot deal with anything but f64 right now.
-  list(APPEND _COMPILER_ARGS "--iree-opt-demote-f64-to-f32=0")
+  list(APPEND _COMPILER_ARGS "--iree-input-demote-f64-to-f32=0")
 
   set(_EXTRA_DEPENDS ${_RULE_DEPENDS})
   if (_RULE_LLVM)
