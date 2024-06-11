@@ -180,6 +180,7 @@ iree_status_t quidditch_executable_issue_dispatch_inline(
   quidditch_dispatch_set_kernel(kernel, &executable->environment,
                                 dispatch_state);
 
+  read_csr(mcycle);
   for (uint32_t z = 0; z < workgroup_count_z; ++z) {
     workgroup_state.workgroup_id_z = z;
     for (uint32_t y = 0; y < workgroup_count_y; ++y) {
@@ -193,6 +194,7 @@ iree_status_t quidditch_executable_issue_dispatch_inline(
   }
 
   quidditch_dispatch_execute_workgroups();
+  read_csr(mcycle);
 
   if (quidditch_dispatch_errors_occurred())
     return iree_make_status(IREE_STATUS_INTERNAL);
