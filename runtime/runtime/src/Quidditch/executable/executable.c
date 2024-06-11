@@ -6,6 +6,7 @@
 
 #include "executable.h"
 
+#include <encoding.h>
 #include <team_decls.h>
 
 #include "Quidditch/dispatch/dispatch.h"
@@ -176,36 +177,22 @@ iree_status_t quidditch_executable_issue_dispatch_inline(
   }
   iree_hal_executable_dispatch_v0_t kernel = library->exports.ptrs[ordinal];
 
-  // Note that this is technically not required as kernel execution has as
-  // post-condition that all compute cores are parked.
-  quidditch_dispatch_wait_for_workers();
-
   quidditch_dispatch_set_kernel(kernel, &executable->environment,
                                 dispatch_state);
 
-  uint32_t worker_to_pop = 0;
   for (uint32_t z = 0; z < workgroup_count_z; ++z) {
     workgroup_state.workgroup_id_z = z;
     for (uint32_t y = 0; y < workgroup_count_y; ++y) {
       workgroup_state.workgroup_id_y = y;
       for (uint32_t x = 0; x < workgroup_count_x; ++x) {
         workgroup_state.workgroup_id_x = x;
-        workgroup_state.processor_id = worker_to_pop;
 
-        quidditch_dispatch_submit_workgroup(&workgroup_state);
-
-        worker_to_pop++;
-        if (worker_to_pop == snrt_cluster_compute_core_num()) {
-          // Wait for all workers to be done before scheduling more of them.
-          // This is easier than waiting for the next compute core to be done.
-          quidditch_dispatch_wait_for_workers();
-          worker_to_pop = 0;
-        }
+        quidditch_dispatch_queue_workgroup(&workgroup_state);
       }
     }
   }
 
-  quidditch_dispatch_wait_for_workers();
+  quidditch_dispatch_execute_workgroups();
 
   if (quidditch_dispatch_errors_occurred())
     return iree_make_status(IREE_STATUS_INTERNAL);
