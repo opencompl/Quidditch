@@ -16,16 +16,27 @@ iree_tablegen_library(
 
 iree_cc_library(
         NAME
-        Quidditch
+        QuidditchPasses
         HDRS
         "Passes.h"
         "Passes.h.inc"
         SRCS
-        "QuidditchTarget.cpp"
         "HoistHALOpsToFunc.cpp"
         "FilterForxDSL.cpp"
         DEPS
         ::PassesIncGen
+        MLIRFuncDialect
+        MLIRIR
+        iree::compiler::Dialect::HAL::IR
+)
+
+iree_cc_library(
+        NAME
+        Quidditch
+        SRCS
+        "QuidditchTarget.cpp"
+        DEPS
+        ::QuidditchPasses
         IREELinalgTransformDialect
         LLVMAnalysis
         LLVMBitReader

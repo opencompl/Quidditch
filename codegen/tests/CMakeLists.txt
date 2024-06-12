@@ -16,7 +16,7 @@ find_program(XDSL_OPT_PATH xdsl-opt
 
 set(QUIDDITCH_TEST_DEPENDS
         FileCheck count not split-file
-        iree-compile
+        iree-compile quidditch-opt
 )
 
 set(QUIDDITCH_LIT_SITE_CFG_OUT ${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py)
