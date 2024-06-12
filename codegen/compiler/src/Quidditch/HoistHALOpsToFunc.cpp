@@ -48,6 +48,7 @@ void HoistHALOpsToFunc::runOnOperation() {
     // they depend on.
     SmallVector<Operation *> halOperations;
     SetVector<Operation *> toClone;
+    SmallVector<std::pair<Value, Value>> queueReplacements;
     func.getFunctionBody().walk([&](Operation *operation) {
       if (operation->getDialect() != dialect)
         return;
@@ -57,7 +58,7 @@ void HoistHALOpsToFunc::runOnOperation() {
         unsigned int index = func.getNumArguments();
         func.insertArgument(index, result.getType(),
                             builder.getDictionaryAttr({}), result.getLoc());
-        result.replaceAllUsesWith(func.getArgument(index));
+        queueReplacements.emplace_back(result, func.getArgument(index));
       }
 
       // Include all operations that the HAL operation transitively depends on.
@@ -96,5 +97,8 @@ void HoistHALOpsToFunc::runOnOperation() {
 
     builder.create<func::CallOp>(wrapper.getLoc(), func, arguments);
     builder.create<func::ReturnOp>(wrapper.getLoc());
+
+    for (auto [result, replacement] : queueReplacements)
+      result.replaceAllUsesWith(replacement);
   }
 }
