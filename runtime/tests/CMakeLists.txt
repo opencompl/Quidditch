@@ -45,6 +45,7 @@ macro(test_executable target_name)
       COMMAND
       ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/util/snitch_trace_to_perfetto.py
       -i ${gen_traces_jsons} --traces ${gen_traces_raw} --elf $<TARGET_FILE:${target_name}>
+      --addr2line ${QUIDDITCH_TOOLCHAIN_ROOT}/bin/llvm-addr2line
       -o events.json
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${target_name}.test
       COMMAND_EXPAND_LISTS
