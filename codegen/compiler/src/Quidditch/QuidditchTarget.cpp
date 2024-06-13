@@ -272,7 +272,7 @@ public:
           IREE::HAL::LibraryBuilder::DispatchAttrs{localMemorySize}, llvmFunc);
     }
     auto *queryLibraryFunc =
-        libraryBuilder.build(libraryName + "_library_query");
+        libraryBuilder.build("quidditch_" + libraryName + "_library_query");
 
     // The query function must be exported for dynamic libraries.
     queryLibraryFunc->setDSOLocal(false);
@@ -393,7 +393,8 @@ public:
       return failure();
 
     if (!IREE::HAL::outputStaticLibrary(
-            libraryName, libraryName + "_library_query",
+            "quidditch_" + libraryName,
+            "quidditch_" + libraryName + "_library_query",
             targetOptions.staticLibraryOutputPath, linkedObject.path))
       return variantOp.emitError() << "static library generation failed";
 

@@ -1,6 +1,6 @@
 #include <Quidditch/dispatch/dispatch.h>
 
-#include <nsnet2.h>
+#include <nsnet2_llvm.h>
 #include <nsnet2_module.h>
 #include <team_decls.h>
 #include <util/run_model.h>
