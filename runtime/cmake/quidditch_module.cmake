@@ -59,7 +59,8 @@ function(quidditch_module)
   cmake_path(GET _MLIR_SRC STEM filename)
 
   get_filename_component(_MLIR_SRC "${_MLIR_SRC}" REALPATH)
-  set(_O_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/${filename}/${filename}.o")
+  set(_O_QUIDDITCH_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/${filename}/${filename}.o")
+  set(_O_LLVM_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/${filename}/${filename}_llvm.o")
   set(_H_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/${filename}/${filename}_module.h")
   set(_MODULE_NAME "${filename}_module")
 
@@ -70,27 +71,36 @@ function(quidditch_module)
   # TODO: xDSL cannot deal with anything but f64 right now.
   list(APPEND _COMPILER_ARGS "--iree-input-demote-f64-to-f32=0")
 
+  list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=llvm-cpu")
+  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-debug-symbols=true")
+  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-triple=riscv32-unknown-elf")
+  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-cpu=generic-rv32")
+  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-cpu-features=+m,+f,+d,+zfh")
+  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-abi=ilp32d")
+  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-float-abi=hard")
+  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-link-embedded=false")
+  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-link-static")
+  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-number-of-threads=8")
+  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-static-library-output-path=${_O_LLVM_FILE_NAME}")
+
+  set(_OUTPUT_FILES "${_H_FILE_NAME}")
+  string(REPLACE ".o" ".h" _STATIC_HDR_PATH "${_O_QUIDDITCH_FILE_NAME}")
+  list(APPEND _OUTPUT_FILES "${_STATIC_HDR_PATH}" "${_O_LLVM_FILE_NAME}")
+
+  set(_OBJECT_FILES "${_O_LLVM_FILE_NAME}")
+
   set(_EXTRA_DEPENDS ${_RULE_DEPENDS})
-  if (_RULE_LLVM)
-    list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=llvm-cpu")
-    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-debug-symbols=true")
-    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-triple=riscv32-unknown-elf")
-    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-cpu=generic-rv32")
-    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-cpu-features=+m,+f,+d,+zfh")
-    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-abi=ilp32d")
-    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-float-abi=hard")
-    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-link-embedded=false")
-    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-link-static")
-    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-number-of-threads=8")
-    list(APPEND _COMPILER_ARGS "--iree-llvmcpu-static-library-output-path=${_O_FILE_NAME}")
-  else ()
+  if (NOT _RULE_LLVM)
     list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=quidditch")
-    list(APPEND _COMPILER_ARGS "--iree-quidditch-static-library-output-path=${_O_FILE_NAME}")
+    list(APPEND _COMPILER_ARGS "--iree-quidditch-static-library-output-path=${_O_QUIDDITCH_FILE_NAME}")
     list(APPEND _COMPILER_ARGS "--iree-quidditch-xdsl-opt-path=${XDSL_OPT_PATH}")
     list(APPEND _COMPILER_ARGS "--iree-quidditch-toolchain-root=${QUIDDITCH_TOOLCHAIN_ROOT}")
 
     list(APPEND _EXTRA_DEPENDS "${XDSL_OPT_PATH}")
     list(APPEND _EXTRA_DEPENDS "${QUIDDITCH_TOOLCHAIN_ROOT}/bin/pulp-as")
+
+    list(APPEND _OUTPUT_FILES "${_O_QUIDDITCH_FILE_NAME}")
+    list(APPEND _OBJECT_FILES "${_O_QUIDDITCH_FILE_NAME}")
   endif ()
 
   list(APPEND _COMPILER_ARGS "--output-format=vm-c")
@@ -98,10 +108,6 @@ function(quidditch_module)
   list(APPEND _COMPILER_ARGS "${_MLIR_SRC}")
   list(APPEND _COMPILER_ARGS "-o")
   list(APPEND _COMPILER_ARGS "${_H_FILE_NAME}")
-
-  set(_OUTPUT_FILES "${_H_FILE_NAME}")
-  string(REPLACE ".o" ".h" _STATIC_HDR_PATH "${_O_FILE_NAME}")
-  list(APPEND _OUTPUT_FILES "${_O_FILE_NAME}" "${_STATIC_HDR_PATH}")
 
   add_custom_command(
       OUTPUT ${_OUTPUT_FILES}
@@ -111,7 +117,7 @@ function(quidditch_module)
 
   add_library(${_MODULE_NAME}
       STATIC
-      ${_H_FILE_NAME} ${_O_FILE_NAME}
+      ${_H_FILE_NAME} ${_OBJECT_FILES}
   )
   target_include_directories(${_MODULE_NAME} INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/${filename})
   target_compile_definitions(${_MODULE_NAME} PUBLIC EMITC_IMPLEMENTATION=\"${_H_FILE_NAME}\")
