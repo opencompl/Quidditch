@@ -61,6 +61,7 @@ struct QuidditchTargetOptions {
   std::string staticLibraryOutputPath;
   std::string xDSLOptPath;
   std::string toolChainRoot;
+  bool assertCompiled = false;
 
   void bindOptions(OptionsBinder &binder) {
     LLVMInitializeRISCVTarget();
@@ -86,6 +87,13 @@ struct QuidditchTargetOptions {
         "iree-quidditch-toolchain-root", toolChainRoot, llvm::cl::cat(category),
         llvm::cl::desc("Path to the root directory of the Quidditch toolchain "
                        "(containing the toolchain file)"));
+    binder.opt<bool>(
+        "iree-quidditch-assert-compiled", assertCompiled,
+        llvm::cl::cat(category),
+        llvm::cl::desc(
+            "If true, errors if any kernel could not be compiled with xDSL."
+            "Otherwise, removes the kernel from the output and emits a warning "
+            "instead."));
   }
 };
 
@@ -127,73 +135,48 @@ public:
     // #hal.descriptor_type memory space through the stack.
     FunctionLikeNest(modulePassManager)
         .addPass(createEraseHALDescriptorTypeFromMemRefPass);
-
     modulePassManager.addPass(quidditch::createHoistHALOpsToFuncPass());
-
     FunctionLikeNest(modulePassManager)
         .addPass(createCanonicalizerPass)
-        .addPass(quidditch::createFilterForxDSLPass);
+        .addPass(quidditch::createFilterForxDSLPass)
+        .addPass([&] {
+          return quidditch::createConvertToRISCVPass(
+              {targetOptions.xDSLOptPath, targetOptions.assertCompiled});
+        });
   }
 
-  FailureOr<SmallVector<IREE::HAL::Artifact>> compileWithxDSL(ModuleOp module) {
+  FailureOr<SmallVector<IREE::HAL::Artifact>>
+  assembleXDSLOutput(ModuleOp module) {
+
     SmallVector<IREE::HAL::Artifact> objectFiles;
-    for (auto func : module.getOps<func::FuncOp>()) {
-      if (!func->hasAttr("xdsl_generated"))
+    DenseSet<StringRef> functionsToMarkDead;
+    for (auto func :
+         llvm::make_early_inc_range(module.getOps<func::FuncOp>())) {
+      auto assembly = func->getAttrOfType<StringAttr>("riscv_assembly");
+      if (!assembly)
         continue;
 
       SmallString<64> stdinFile;
       int stdinFd;
-      if (llvm::sys::fs::createTemporaryFile("xdsl-in", "mlir", stdinFd,
+      if (llvm::sys::fs::createTemporaryFile("xdsl-in", "S", stdinFd,
                                              stdinFile)) {
         return failure();
       }
       llvm::FileRemover stdinFileRemove(stdinFile);
       {
         llvm::raw_fd_ostream ss(stdinFd, /*shouldClose=*/true);
-        func.print(ss, OpPrintingFlags().printGenericOpForm().useLocalScope());
+        ss << assembly.getValue();
       }
-
-      SmallString<64> stdoutFile;
-      if (llvm::sys::fs::createTemporaryFile("xdsl-out", "S", stdoutFile))
-        return failure();
-
-      llvm::FileRemover stdoutFileRemove(stdoutFile);
-      std::optional<llvm::StringRef> redirects[3] = {
-          /*stdin=*/stdinFile.str(), /*stdout=*/stdoutFile.str(),
-          /*stderr=*/{}};
-
-      int ret = llvm::sys::ExecuteAndWait(
-          targetOptions.xDSLOptPath,
-          {targetOptions.xDSLOptPath, "-p",
-           "convert-linalg-to-memref-stream,memref-streamify,convert-"
-           "memref-stream-to-loops,arith-add-fastmath,loop-hoist-memref,"
-           "lower-affine,convert-memref-stream-to-snitch,convert-func-to-"
-           "riscv-func,convert-memref-to-riscv,convert-arith-to-riscv,"
-           "convert-scf-to-riscv-scf,dce,reconcile-unrealized-casts,test-"
-           "lower-snitch-stream-to-asm",
-           "-t", "riscv-asm"},
-          std::nullopt, redirects);
-      if (ret != 0)
-        return failure();
 
       auto &objectFile = objectFiles.emplace_back(
           IREE::HAL::Artifact::createTemporary("xdsl-out", "o"));
-      ret = llvm::sys::ExecuteAndWait(
+      int ret = llvm::sys::ExecuteAndWait(
           targetOptions.toolChainRoot + "/bin/pulp-as",
           {targetOptions.toolChainRoot + "/bin/pulp-as", "--filetype=obj",
-           "--target-abi=ilp32d", stdoutFile.str(), "-o", objectFile.path,
+           "--target-abi=ilp32d", stdinFile.str(), "-o", objectFile.path,
            "--mcpu=snitch", "-g"});
       if (ret != 0)
         return failure();
-
-      // Function body no longer needed.
-      func.getBody().getBlocks().clear();
-      func.setVisibility(SymbolTable::Visibility::Private);
-      func->removeAttr("xdsl_generated");
-      // Required to tell the conversion pass to LLVM that this is actually a
-      // call into the same linkage unit and does not have to be rewritten to a
-      // HAL module call.
-      func->setAttr("hal.import.bitcode", UnitAttr::get(module.getContext()));
     }
     return objectFiles;
   }
@@ -339,7 +322,7 @@ public:
     ModuleOp module = variantOp.getInnerModule();
 
     FailureOr<SmallVector<IREE::HAL::Artifact>> objectFilesOrFailure =
-        compileWithxDSL(module);
+        assembleXDSLOutput(module);
     if (failed(objectFilesOrFailure))
       return failure();
 

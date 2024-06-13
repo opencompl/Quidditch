@@ -21,6 +21,8 @@ iree_cc_library(
         "Passes.h"
         "Passes.h.inc"
         SRCS
+        "ConvertToRISCV.cpp"
+        "FilterForxDSL.cpp"
         "HoistHALOpsToFunc.cpp"
         "FilterForxDSL.cpp"
         DEPS
