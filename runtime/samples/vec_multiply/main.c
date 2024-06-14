@@ -1,7 +1,6 @@
 #include <Quidditch/dispatch/dispatch.h>
 
 #include <simple_add.h>
-#include <simple_add_llvm.h>
 #include <simple_add_module.h>
 #include <team_decls.h>
 #include <util/run_model.h>
@@ -18,9 +17,8 @@ int main() {
       .libraries =
           (iree_hal_executable_library_query_fn_t[]){
               quidditch_add_dispatch_0_library_query,
-              add_dispatch_0_library_query,
           },
-      .num_libraries = 2,
+      .num_libraries = 1,
       .module_constructor = test_simple_add_create,
       .main_function = iree_make_cstring_view("test_simple_add.add"),
 

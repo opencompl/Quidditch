@@ -22,9 +22,10 @@ iree_cc_library(
         "Passes.h.inc"
         SRCS
         "ConvertToRISCV.cpp"
+        "DisableQuidditchVariant.cpp"
         "FilterForxDSL.cpp"
         "HoistHALOpsToFunc.cpp"
-        "FilterForxDSL.cpp"
+        "LinkExecutables.cpp"
         DEPS
         ::PassesIncGen
         MLIRFuncDialect

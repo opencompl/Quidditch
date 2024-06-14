@@ -7,10 +7,14 @@
 #include "iree/compiler/Codegen/Common/Passes.h"
 #include "iree/compiler/Codegen/LLVMCPU/Passes.h"
 #include "iree/compiler/Dialect/HAL/Target/TargetRegistry.h"
+#include "mlir/Conversion/ComplexToStandard/ComplexToStandard.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
+#include "mlir/Dialect/Arith/Transforms/Passes.h"
 #include "mlir/Dialect/ArmNeon/ArmNeonDialect.h"
 #include "mlir/Dialect/ArmSME/IR/ArmSME.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Linalg/Passes.h"
+#include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
@@ -134,24 +138,68 @@ public:
     // TODO: Remove the following pass and plumb support for
     // #hal.descriptor_type memory space through the stack.
     FunctionLikeNest(modulePassManager)
-        .addPass(createEraseHALDescriptorTypeFromMemRefPass);
-    modulePassManager.addPass(quidditch::createHoistHALOpsToFuncPass());
+        .addPass(createEraseHALDescriptorTypeFromMemRefPass)
+        .addPass(createMemrefCopyToLinalgPass);
+    addConstantBufferizePasses(modulePassManager);
+    FunctionLikeNest(modulePassManager)
+        .addPass(createFoldTensorExtractOpPass)
+        .addPass(createLinalgGeneralizeNamedOpsPass)
+        // Handle complex operation conversion.
+        .addPass(createConvertComplexToStandardPass)
+        // math dialect elementary functions -> polynomial form.
+        .addPass(createPolynomialApproximationPass)
+        .addPass(createHoistStaticallyBoundAllocationsPass)
+        .addPass(createIREEExpandStridedMetadataPass)
+        .addPass(createCleanupBufferAllocViewPass);
+
+    modulePassManager.addPass(
+        quidditch::createHoistHALOpsToFuncPass({targetOptions.assertCompiled}));
     FunctionLikeNest(modulePassManager)
         .addPass(createCanonicalizerPass)
         .addPass(quidditch::createFilterForxDSLPass)
         .addPass([&] {
           return quidditch::createConvertToRISCVPass(
               {targetOptions.xDSLOptPath, targetOptions.assertCompiled});
-        });
+        })
+        .addPass(arith::createArithExpandOpsPass)
+        .addPass(memref::createExpandOpsPass)
+        .addPass(memref::createFoldMemRefAliasOpsPass)
+        .addPass(createCanonicalizerPass)
+        .addPass(createCSEPass);
+
+    modulePassManager.addPass(
+        createConvertToLLVMPass(/*reassociateFpReordering=*/false));
+    modulePassManager.addPass(createReconcileUnrealizedCastsPass());
+    // We rely on MLIR symbol visibility being correct after this point and
+    // need to mirror the LLVM linkage that was assigned during conversion.
+    modulePassManager.addPass(createLLVMCPUSynchronizeSymbolVisibilityPass());
+
+    modulePassManager.addPass(createCanonicalizerPass());
+    modulePassManager.addPass(createCSEPass());
+    modulePassManager.addNestedPass<LLVM::LLVMFuncOp>(
+        createAddFastMathFlagsPass());
+    passManager.addPass(quidditch::createDisableQuidditchVariantPass());
+  }
+
+  void buildLinkingPassPipeline(OpPassManager &passManager) override {
+    passManager.addPass(quidditch::createLinkExecutablesPass());
+    // Cleanup IR duplication.
+    passManager.addNestedPass<IREE::HAL::ExecutableOp>(
+        mlir::createCanonicalizerPass());
+
+    // Assign final executable constant and import ordinals.
+    auto &variantPassManager = passManager.nest<IREE::HAL::ExecutableOp>()
+                                   .nest<IREE::HAL::ExecutableVariantOp>();
+    variantPassManager.addPass(createLLVMCPUAssignConstantOrdinalsPass());
+    variantPassManager.addPass(createLLVMCPUAssignImportOrdinalsPass());
   }
 
   FailureOr<SmallVector<IREE::HAL::Artifact>>
   assembleXDSLOutput(ModuleOp module) {
 
     SmallVector<IREE::HAL::Artifact> objectFiles;
-    DenseSet<StringRef> functionsToMarkDead;
     for (auto func :
-         llvm::make_early_inc_range(module.getOps<func::FuncOp>())) {
+         llvm::make_early_inc_range(module.getOps<LLVM::LLVMFuncOp>())) {
       auto assembly = func->getAttrOfType<StringAttr>("riscv_assembly");
       if (!assembly)
         continue;
@@ -185,22 +233,6 @@ public:
   toLLVMModule(llvm::LLVMContext &context, ModuleOp module,
                const llvm::TargetMachine &machine,
                IREE::HAL::ExecutableVariantOp variantOp) {
-
-    auto passManager = PassManager::on<ModuleOp>(module.getContext());
-    passManager.addPass(
-        createConvertToLLVMPass(/*reassociateFpReordering=*/false));
-    passManager.addPass(createReconcileUnrealizedCastsPass());
-    // We rely on MLIR symbol visibility being correct after this point and
-    // need to mirror the LLVM linkage that was assigned during conversion.
-    passManager.addPass(createLLVMCPUSynchronizeSymbolVisibilityPass());
-
-    passManager.addPass(createCanonicalizerPass());
-    passManager.addPass(createCSEPass());
-    passManager.addNestedPass<LLVM::LLVMFuncOp>(createAddFastMathFlagsPass());
-
-    if (failed(passManager.run(module)))
-      return nullptr;
-
     module->setAttr(
         LLVM::LLVMDialect::getTargetTripleAttrName(),
         StringAttr::get(module.getContext(), machine.getTargetTriple().str()));
@@ -228,7 +260,10 @@ public:
       auto *llvmFunc =
           llvmModule->getFunction((exportOp.getName() + "$iree_to_xdsl").str());
       if (!llvmFunc)
+        llvmFunc = llvmModule->getFunction(exportOp.getName());
+      if (!llvmFunc)
         continue;
+
       llvmFunc->setLinkage(llvm::GlobalValue::LinkageTypes::InternalLinkage);
       llvmFunc->setDSOLocal(true);
 
