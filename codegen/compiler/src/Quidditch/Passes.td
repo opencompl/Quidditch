@@ -3,6 +3,12 @@
 
 include "mlir/Pass/PassBase.td"
 
+defvar assertCompiledOption =
+  Option<"assertCompiled", "assert-compiled", "bool", "false",
+         "If true, errors if any kernel could not be compiled with xDSL."
+         "Otherwise, removes the kernel from the output and emits a warning "
+         "instead.">;
+
 def HoistHALOpsToFuncPass
   : Pass<"quidditch-hoist-hal-ops-to-func", "mlir::ModuleOp"> {
   let description = [{
@@ -16,6 +22,8 @@ def HoistHALOpsToFuncPass
 
     The original function is additionally tagged with a "xdsl_generated" unit attribute.
   }];
+
+  let options = [assertCompiledOption];
 }
 
 def FilterForxDSLPass
@@ -32,11 +40,27 @@ def ConvertToRISCVPass : Pass<"quidditch-convert-to-riscv", "mlir::func::FuncOp"
   let options = [
     Option<"xDSLOptPath", "xdsl-opt-path", "std::string", [{""}],
       "Path to the 'xdsl-opt' executable to use for kernel compilation.">,
-    Option<"assertCompiled", "assert-compiled", "bool", "false",
-      "If true, errors if any kernel could not be compiled with xDSL."
-      "Otherwise, removes the kernel from the output and emits a warning "
-      "instead.">,
+    assertCompiledOption,
   ];
+}
+
+def LinkExecutablesPass : Pass<"quidditch-link-executables", "mlir::ModuleOp"> {
+  let description = [{
+    Combines all `hal.executable.variant`s of the same target into a single
+    `hal.executable.variant` nested within one `hal.executable`.
+
+    Additionally performs replacement of any kernels that xDSL failed to
+    compile with LLVM implementations.
+  }];
+}
+
+def DisableQuidditchVariantPass : Pass<"quidditch-disable-variant",
+  "mlir::iree_compiler::IREE::HAL::ExecutableVariantOp"> {
+  let description = [{
+    Disables the `hal.executable.variant` for Quidditch if `xDSL` failed
+    compilation. This is done by adding a `hal.executable.condition` returning
+    false.
+  }];
 }
 
 #endif

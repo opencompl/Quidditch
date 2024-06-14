@@ -23,6 +23,25 @@ protected:
 };
 } // namespace
 
+static bool canUseBarepointerCC(Type type) {
+  auto memRef = dyn_cast<MemRefType>(type);
+  if (!memRef)
+    return true;
+  if (isa<UnrankedMemRefType>(memRef))
+    return false;
+
+  int64_t offset = 0;
+  SmallVector<int64_t, 4> strides;
+  if (failed(getStridesAndOffset(memRef, strides, offset)))
+    return false;
+
+  for (int64_t stride : strides)
+    if (ShapedType::isDynamic(stride))
+      return false;
+
+  return !ShapedType::isDynamic(offset);
+}
+
 void HoistHALOpsToFunc::runOnOperation() {
   OpBuilder builder(&getContext());
   builder.setInsertionPointToEnd(getOperation().getBody());
@@ -95,7 +114,36 @@ void HoistHALOpsToFunc::runOnOperation() {
       for (Value value : op->getResults())
         arguments.push_back(mapping.lookup(value));
 
+    // TODO: Add support in xDSL for memrefs with dynamic components
+    //  (with calling convention support if needed).
+    // Need to check the types here explicitly as LLVM conversion will fail
+    // later otherwise.
+    if (!llvm::all_of(llvm::map_range(arguments, std::mem_fn(&Value::getType)),
+                      canUseBarepointerCC)) {
+      auto emit = assertCompiled ? &func::FuncOp::emitError
+                                 : &func::FuncOp::emitWarning;
+
+      (func.*emit)("function signature ")
+          << func.getFunctionType()
+          << " does not support bare-pointer calling convention required by "
+             "xDSL.";
+
+      builder.create<func::ReturnOp>(wrapper.getLoc());
+
+      for (auto [result, replacement] : queueReplacements)
+        result.replaceAllUsesWith(replacement);
+
+      // Set as if code generation failed.
+      func.getBody().getBlocks().clear();
+      func.setVisibility(SymbolTable::Visibility::Private);
+      func->removeAttr("xdsl_generated");
+      // Stop lying to make LLVM conversion succeed.
+      func->removeAttr("llvm.bareptr");
+      continue;
+    }
+
     builder.create<func::CallOp>(wrapper.getLoc(), func, arguments);
+
     builder.create<func::ReturnOp>(wrapper.getLoc());
 
     for (auto [result, replacement] : queueReplacements)

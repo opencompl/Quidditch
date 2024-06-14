@@ -52,7 +52,7 @@ find_program(XDSL_OPT_PATH xdsl-opt
 # The resulting library is the source file's name with the extension removed and
 # '_module' appended.
 function(quidditch_module)
-  cmake_parse_arguments(_RULE "LLVM" "SRC" "FLAGS;DEPENDS" ${ARGN})
+  cmake_parse_arguments(_RULE "LLVM;ASSERT_XDSL" "SRC" "FLAGS;DEPENDS" ${ARGN})
 
   set(_MLIR_SRC "${_RULE_SRC}")
 
@@ -71,6 +71,32 @@ function(quidditch_module)
   # TODO: xDSL cannot deal with anything but f64 right now.
   list(APPEND _COMPILER_ARGS "--iree-input-demote-f64-to-f32=0")
 
+  set(_OUTPUT_FILES "${_H_FILE_NAME}")
+  string(REPLACE ".o" ".h" _STATIC_HDR_PATH "${_O_LLVM_FILE_NAME}")
+  list(APPEND _OUTPUT_FILES "${_STATIC_HDR_PATH}" "${_O_LLVM_FILE_NAME}")
+
+  set(_OBJECT_FILES "${_O_LLVM_FILE_NAME}")
+
+  set(_EXTRA_DEPENDS ${_RULE_DEPENDS})
+  if (NOT _RULE_LLVM)
+    list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=quidditch")
+    list(APPEND _COMPILER_ARGS "--iree-quidditch-static-library-output-path=${_O_QUIDDITCH_FILE_NAME}")
+    list(APPEND _COMPILER_ARGS "--iree-quidditch-xdsl-opt-path=${XDSL_OPT_PATH}")
+    list(APPEND _COMPILER_ARGS "--iree-quidditch-toolchain-root=${QUIDDITCH_TOOLCHAIN_ROOT}")
+    if (_RULE_ASSERT_XDSL)
+      list(APPEND _COMPILER_ARGS "--iree-quidditch-assert-compiled=true")
+    endif ()
+
+    list(APPEND _EXTRA_DEPENDS "${XDSL_OPT_PATH}")
+    list(APPEND _EXTRA_DEPENDS "${QUIDDITCH_TOOLCHAIN_ROOT}/bin/pulp-as")
+
+    list(APPEND _OUTPUT_FILES "${_O_QUIDDITCH_FILE_NAME}")
+    list(APPEND _OBJECT_FILES "${_O_QUIDDITCH_FILE_NAME}")
+
+    string(REPLACE ".o" ".h" _STATIC_HDR_PATH "${_O_QUIDDITCH_FILE_NAME}")
+    list(APPEND _OUTPUT_FILES "${_STATIC_HDR_PATH}")
+  endif ()
+
   list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=llvm-cpu")
   list(APPEND _COMPILER_ARGS "--iree-llvmcpu-debug-symbols=true")
   list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-triple=riscv32-unknown-elf")
@@ -82,26 +108,6 @@ function(quidditch_module)
   list(APPEND _COMPILER_ARGS "--iree-llvmcpu-link-static")
   list(APPEND _COMPILER_ARGS "--iree-llvmcpu-number-of-threads=8")
   list(APPEND _COMPILER_ARGS "--iree-llvmcpu-static-library-output-path=${_O_LLVM_FILE_NAME}")
-
-  set(_OUTPUT_FILES "${_H_FILE_NAME}")
-  string(REPLACE ".o" ".h" _STATIC_HDR_PATH "${_O_QUIDDITCH_FILE_NAME}")
-  list(APPEND _OUTPUT_FILES "${_STATIC_HDR_PATH}" "${_O_LLVM_FILE_NAME}")
-
-  set(_OBJECT_FILES "${_O_LLVM_FILE_NAME}")
-
-  set(_EXTRA_DEPENDS ${_RULE_DEPENDS})
-  if (NOT _RULE_LLVM)
-    list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=quidditch")
-    list(APPEND _COMPILER_ARGS "--iree-quidditch-static-library-output-path=${_O_QUIDDITCH_FILE_NAME}")
-    list(APPEND _COMPILER_ARGS "--iree-quidditch-xdsl-opt-path=${XDSL_OPT_PATH}")
-    list(APPEND _COMPILER_ARGS "--iree-quidditch-toolchain-root=${QUIDDITCH_TOOLCHAIN_ROOT}")
-
-    list(APPEND _EXTRA_DEPENDS "${XDSL_OPT_PATH}")
-    list(APPEND _EXTRA_DEPENDS "${QUIDDITCH_TOOLCHAIN_ROOT}/bin/pulp-as")
-
-    list(APPEND _OUTPUT_FILES "${_O_QUIDDITCH_FILE_NAME}")
-    list(APPEND _OBJECT_FILES "${_O_QUIDDITCH_FILE_NAME}")
-  endif ()
 
   list(APPEND _COMPILER_ARGS "--output-format=vm-c")
   list(APPEND _COMPILER_ARGS "--iree-vm-target-index-bits=32")
@@ -115,17 +121,20 @@ function(quidditch_module)
       DEPENDS ${IREE_COMPILE_PATH} ${_MLIR_SRC} ${_EXTRA_DEPENDS}
   )
 
+  cmake_path(REPLACE_EXTENSION _H_FILE_NAME LAST_ONLY "c" OUTPUT_VARIABLE _C_FILE_NAME)
+  file(CONFIGURE OUTPUT ${_C_FILE_NAME} CONTENT [[
+#define EMITC_IMPLEMENTATION
+#include "@_MODULE_NAME@.h"
+]] @ONLY)
   add_library(${_MODULE_NAME}
-      STATIC
-      ${_H_FILE_NAME} ${_OBJECT_FILES}
+      STATIC ${_C_FILE_NAME} ${_OBJECT_FILES}
+      ${_H_FILE_NAME}
+  )
+  target_link_libraries(${_MODULE_NAME}
+      PUBLIC
+      iree::vm
   )
   target_include_directories(${_MODULE_NAME} INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/${filename})
-  target_compile_definitions(${_MODULE_NAME} PUBLIC EMITC_IMPLEMENTATION=\"${_H_FILE_NAME}\")
-  set_target_properties(
-      ${_MODULE_NAME}
-      PROPERTIES
-      LINKER_LANGUAGE C
-  )
 endfunction()
 
 # Use iree-turbine to convert a PyTorch model to MLIR.

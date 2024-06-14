@@ -92,7 +92,6 @@ void ConvertToRISCV::runOnOperation() {
   // Function body no longer needed.
   func.getBody().getBlocks().clear();
   func.setVisibility(SymbolTable::Visibility::Private);
-  func->removeAttr("xdsl_generated");
   // Required to tell the conversion pass to LLVM that this is actually a
   // call into the same linkage unit and does not have to be rewritten to a
   // HAL module call.

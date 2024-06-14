@@ -1,4 +1,4 @@
-quidditch_module(SRC simple_add.mlir)
+quidditch_module(SRC simple_add.mlir ASSERT_XDSL)
 
 add_executable(vec_multiply main.c)
 target_link_libraries(

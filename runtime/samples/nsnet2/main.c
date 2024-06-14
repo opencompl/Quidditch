@@ -1,6 +1,6 @@
 #include <Quidditch/dispatch/dispatch.h>
 
-#include <nsnet2_llvm.h>
+#include <nsnet2.h>
 #include <nsnet2_module.h>
 #include <team_decls.h>
 #include <util/run_model.h>
@@ -8,7 +8,7 @@
 int main() {
   if (!snrt_is_dm_core()) return quidditch_dispatch_enter_worker_loop();
 
-  float data[161];
+  double data[161];
 
   for (int i = 0; i < IREE_ARRAYSIZE(data); i++) {
     data[i] = (i + 1);
@@ -17,12 +17,12 @@ int main() {
   model_config_t config = {
       .libraries =
           (iree_hal_executable_library_query_fn_t[]){
-              compiled_ns_net2_linked_llvm_cpu_library_query},
+              quidditch_compiled_ns_net2_linked_quidditch_library_query},
       .num_libraries = 1,
       .module_constructor = compiled_ns_net2_create,
       .main_function = iree_make_cstring_view("compiled_ns_net2.main"),
 
-      .element_type = IREE_HAL_ELEMENT_TYPE_FLOAT_32,
+      .element_type = IREE_HAL_ELEMENT_TYPE_FLOAT_64,
 
       .num_inputs = 1,
       .input_data = (const void*[]){data, data},
@@ -41,7 +41,7 @@ int main() {
   if (!snrt_is_dm_core()) return 0;
 
   for (int i = 0; i < IREE_ARRAYSIZE(data); i++) {
-    float value = data[i];
+    double value = data[i];
     printf("%f\n", value);
   }
   return 0;
