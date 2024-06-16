@@ -64,8 +64,9 @@ void ConvertToRISCV::runOnOperation() {
       xDSLOptPath,
       {xDSLOptPath, "-p",
        "convert-linalg-to-memref-stream,memref-streamify,convert-"
-       "memref-stream-to-loops,arith-add-fastmath,loop-hoist-memref,"
-       "lower-affine,convert-memref-stream-to-snitch,convert-func-to-"
+       "memref-stream-to-loops,scf-for-loop-flatten,"
+       "arith-add-fastmath,loop-hoist-memref,lower-affine,convert-memref-"
+       "stream-to-snitch,convert-func-to-"
        "riscv-func,convert-memref-to-riscv,convert-arith-to-riscv,"
        "convert-scf-to-riscv-scf,dce,reconcile-unrealized-casts,test-"
        "lower-snitch-stream-to-asm",
