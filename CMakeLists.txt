@@ -49,6 +49,7 @@ ExternalProject_Add(codegen
     USES_TERMINAL_CONFIGURE ON
     USES_TERMINAL_BUILD ON
     USES_TERMINAL_TEST ON
+    BUILD_ALWAYS ON
 )
 
 set(runtime_cmake_args)
@@ -67,6 +68,7 @@ ExternalProject_Add(runtime
     USES_TERMINAL_CONFIGURE ON
     USES_TERMINAL_BUILD ON
     USES_TERMINAL_TEST ON
+    BUILD_ALWAYS ON
 )
 add_dependencies(runtime codegen)
 
