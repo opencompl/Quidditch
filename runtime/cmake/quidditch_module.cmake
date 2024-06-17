@@ -52,17 +52,23 @@ find_program(XDSL_OPT_PATH xdsl-opt
 # The resulting library is the source file's name with the extension removed and
 # '_module' appended.
 function(quidditch_module)
-  cmake_parse_arguments(_RULE "LLVM;ASSERT_XDSL" "SRC" "FLAGS;DEPENDS" ${ARGN})
+  cmake_parse_arguments(_RULE "LLVM;ASSERT_XDSL" "SRC;N_THREADS;DST" "FLAGS;DEPENDS" ${ARGN})
 
   set(_MLIR_SRC "${_RULE_SRC}")
+  if (NOT _RULE_DST)
+    cmake_path(GET _MLIR_SRC STEM _RULE_DST)
+    set(_RULE_DST "${_RULE_DST}")
+  endif ()
 
-  cmake_path(GET _MLIR_SRC STEM filename)
+  if (NOT _RULE_N_THREADS)
+    set(_RULE_N_THREADS 8)
+  endif ()
 
   get_filename_component(_MLIR_SRC "${_MLIR_SRC}" REALPATH)
-  set(_O_QUIDDITCH_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/${filename}/${filename}.o")
-  set(_O_LLVM_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/${filename}/${filename}_llvm.o")
-  set(_H_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/${filename}/${filename}_module.h")
-  set(_MODULE_NAME "${filename}_module")
+  set(_O_QUIDDITCH_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_DST}/${_RULE_DST}.o")
+  set(_O_LLVM_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_DST}/${_RULE_DST}_llvm.o")
+  set(_H_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_DST}/${_RULE_DST}_module.h")
+  set(_MODULE_NAME "${_RULE_DST}_module")
 
   set(_COMPILER_ARGS ${_RULE_FLAGS})
   list(APPEND _COMPILER_ARGS "--iree-vm-bytecode-module-strip-source-map=true")
@@ -72,10 +78,7 @@ function(quidditch_module)
   list(APPEND _COMPILER_ARGS "--iree-input-demote-f64-to-f32=0")
 
   set(_OUTPUT_FILES "${_H_FILE_NAME}")
-  string(REPLACE ".o" ".h" _STATIC_HDR_PATH "${_O_LLVM_FILE_NAME}")
-  list(APPEND _OUTPUT_FILES "${_STATIC_HDR_PATH}" "${_O_LLVM_FILE_NAME}")
-
-  set(_OBJECT_FILES "${_O_LLVM_FILE_NAME}")
+  set(_OBJECT_FILES)
 
   set(_EXTRA_DEPENDS ${_RULE_DEPENDS})
   if (NOT _RULE_LLVM)
@@ -92,10 +95,17 @@ function(quidditch_module)
 
     list(APPEND _OUTPUT_FILES "${_O_QUIDDITCH_FILE_NAME}")
     list(APPEND _OBJECT_FILES "${_O_QUIDDITCH_FILE_NAME}")
+    list(APPEND _OBJECT_FILES "${_O_LLVM_FILE_NAME}")
 
     string(REPLACE ".o" ".h" _STATIC_HDR_PATH "${_O_QUIDDITCH_FILE_NAME}")
     list(APPEND _OUTPUT_FILES "${_STATIC_HDR_PATH}")
+  else ()
+    set(_O_LLVM_FILE_NAME ${_O_QUIDDITCH_FILE_NAME})
+    list(APPEND _OBJECT_FILES "${_O_LLVM_FILE_NAME}")
   endif ()
+
+  string(REPLACE ".o" ".h" _STATIC_HDR_PATH "${_O_LLVM_FILE_NAME}")
+  list(APPEND _OUTPUT_FILES "${_STATIC_HDR_PATH}" "${_O_LLVM_FILE_NAME}")
 
   list(APPEND _COMPILER_ARGS "--iree-hal-target-backends=llvm-cpu")
   list(APPEND _COMPILER_ARGS "--iree-llvmcpu-debug-symbols=true")
@@ -106,7 +116,7 @@ function(quidditch_module)
   list(APPEND _COMPILER_ARGS "--iree-llvmcpu-target-float-abi=hard")
   list(APPEND _COMPILER_ARGS "--iree-llvmcpu-link-embedded=false")
   list(APPEND _COMPILER_ARGS "--iree-llvmcpu-link-static")
-  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-number-of-threads=8")
+  list(APPEND _COMPILER_ARGS "--iree-llvmcpu-number-of-threads=${_RULE_N_THREADS}")
   list(APPEND _COMPILER_ARGS "--iree-llvmcpu-static-library-output-path=${_O_LLVM_FILE_NAME}")
 
   list(APPEND _COMPILER_ARGS "--output-format=vm-c")
@@ -126,15 +136,15 @@ function(quidditch_module)
 #define EMITC_IMPLEMENTATION
 #include "@_MODULE_NAME@.h"
 ]] @ONLY)
-  add_library(${_MODULE_NAME}
+  add_library(${_RULE_DST}
       STATIC ${_C_FILE_NAME} ${_OBJECT_FILES}
       ${_H_FILE_NAME}
   )
-  target_link_libraries(${_MODULE_NAME}
+  target_link_libraries(${_RULE_DST}
       PUBLIC
       iree::vm
   )
-  target_include_directories(${_MODULE_NAME} INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/${filename})
+  target_include_directories(${_RULE_DST} INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/${_RULE_DST})
 endfunction()
 
 # Use iree-turbine to convert a PyTorch model to MLIR.
