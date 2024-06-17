@@ -5,7 +5,7 @@ target_link_libraries(
     vec_multiply
     PRIVATE
     samples_util
-    simple_add_module
+    simple_add
     snRuntime
     Quidditch::dispatch::dispatch
 )

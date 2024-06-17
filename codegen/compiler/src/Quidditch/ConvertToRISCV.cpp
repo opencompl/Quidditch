@@ -40,7 +40,7 @@ void ConvertToRISCV::runOnOperation() {
   llvm::FileRemover stdinFileRemove(stdinFile);
   {
     llvm::raw_fd_ostream ss(stdinFd, /*shouldClose=*/true);
-    func.print(ss, OpPrintingFlags().printGenericOpForm().useLocalScope());
+    func.print(ss, OpPrintingFlags().useLocalScope());
   }
 
   SmallString<64> stdoutFile;
