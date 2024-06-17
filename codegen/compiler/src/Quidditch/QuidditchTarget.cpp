@@ -155,6 +155,7 @@ public:
     modulePassManager.addPass(quidditch::createOutlineLinalgOpsToxDSLPass(
         {targetOptions.assertCompiled}));
     FunctionLikeNest(modulePassManager)
+        .addPass(quidditch::createReluToMaxPass)
         .addPass(createCanonicalizerPass)
         .addPass([&] {
           return quidditch::createConvertToRISCVPass(

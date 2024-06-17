@@ -34,6 +34,18 @@ void LinkExecutables::runOnOperation() {
   if (sourceExecutableOps.size() <= 1)
     return;
 
+  // TODO: This is a huge hack to workaround the linking process wanting a
+  //  unified condition for the resulting `hal.executable.variant`. We instead
+  //  want a condition per-kernel, aka per `hal.executable.variant` prior to
+  //  linking. We currently achieve this by using different
+  //  `hal.executable.condition` ops which are processed prior to linking in the
+  //  stream-to-hal conversion. Remove the condition now to satisfy the linker
+  //  requirement.
+  for (IREE::HAL::ExecutableOp executable : sourceExecutableOps)
+    for (auto variant : executable.getOps<IREE::HAL::ExecutableVariantOp>())
+      if (IREE::HAL::ExecutableConditionOp condition = variant.getConditionOp())
+        condition.erase();
+
   // Guess a module name, if needed, to make the output files readable.
   std::string moduleName = guessModuleName(moduleOp, "quidditch_module");
 
