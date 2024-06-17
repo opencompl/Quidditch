@@ -9,31 +9,19 @@ defvar assertCompiledOption =
          "Otherwise, removes the kernel from the output and emits a warning "
          "instead.">;
 
-def HoistHALOpsToFuncPass
-  : Pass<"quidditch-hoist-hal-ops-to-func", "mlir::ModuleOp"> {
+def OutlineLinalgOpsToxDSLPass
+  : Pass<"quidditch-outline-linalg-ops-to-xdsl", "mlir::ModuleOp"> {
   let description = [{
-    Pass performing HAL operation outlining.
-    For every function in the module this creates another function called "<old-name>$iree_to_xDSL" and moves all HAL
-    operations to that function before calling the original function.
+    Outlines a series of linalg operation in a function into their own
+    functions with a suitable calling convention for xDSL.
+    The generated functions can be identified via `xdsl_generated` attribute.
 
-    This allows to pass the original function to xDSL for kernel compilation while compiling the new generated function
-    can be lowered by IREE.
-    This pass can be removed if xDSL were to learn how to lower IREE HAL operations to RISC-V.
-
-    The original function is additionally tagged with a "xdsl_generated" unit attribute.
+    The original function that the outlining was performed on will have a
+    `xdsl_kernels` which is an array of symbol references to the outlined
+    functions.
   }];
 
   let options = [assertCompiledOption];
-}
-
-def FilterForxDSLPass
-  : Pass<"quidditch-filter-for-xdsl"> {
-  let description = [{
-    Pass rewriting operations to workaround xDSL operations.
-
-    Right now these are:
-    * Remove `memref.assume_alignment`.
-  }];
 }
 
 def ConvertToRISCVPass : Pass<"quidditch-convert-to-riscv", "mlir::func::FuncOp"> {

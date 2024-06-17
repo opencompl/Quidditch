@@ -102,22 +102,35 @@ void LinkExecutables::runOnOperation() {
 
     xDSLFunctionsEncountered++;
 
-    // xDSL function is considered having failed to compile if it does not exist
-    // or does not have a body yet no 'riscv_assembly' either.
-    auto xdslFuncOp = quidditchTable.lookup<LLVM::LLVMFuncOp>(symName);
-    if (xdslFuncOp && xdslFuncOp->hasAttrOfType<StringAttr>("riscv_assembly"))
+    auto attr = func->getAttrOfType<ArrayAttr>("xdsl_kernels");
+    if (!attr)
       continue;
 
-    if (xdslFuncOp && !xdslFuncOp.empty())
+    SmallVector<Operation *> toErase;
+    bool failed = false;
+    for (FlatSymbolRefAttr ref : attr.getAsRange<FlatSymbolRefAttr>()) {
+      // xDSL kernel is considered having failed to compile if it does not
+      // exist or does not have a body yet no 'riscv_assembly' either.
+      auto xdslFuncOp = quidditchTable.lookup<LLVM::LLVMFuncOp>(ref.getAttr());
+      if (xdslFuncOp && xdslFuncOp->hasAttrOfType<StringAttr>("riscv_assembly"))
+        continue;
+
+      if (xdslFuncOp && !xdslFuncOp.empty())
+        continue;
+
+      failed = true;
+      if (xdslFuncOp)
+        toErase.push_back(xdslFuncOp);
+    }
+    if (!failed)
       continue;
 
-    auto llvmFuncOp =
-        llvmTable.lookup<LLVM::LLVMFuncOp>(xdslFuncOp.getSymNameAttr());
+    auto llvmFuncOp = llvmTable.lookup<LLVM::LLVMFuncOp>(symName);
     if (!llvmFuncOp)
       continue;
 
-    if (xdslFuncOp)
-      xdslFuncOp.erase();
+    for (Operation *op : toErase)
+      op->erase();
 
     xDSLFunctionsReplaced++;
 
