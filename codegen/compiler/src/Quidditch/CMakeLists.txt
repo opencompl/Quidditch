@@ -23,8 +23,7 @@ iree_cc_library(
         SRCS
         "ConvertToRISCV.cpp"
         "DisableQuidditchVariant.cpp"
-        "FilterForxDSL.cpp"
-        "HoistHALOpsToFunc.cpp"
+        "OutlineLinalgOpsToxDSL.cpp"
         "LinkExecutables.cpp"
         DEPS
         ::PassesIncGen

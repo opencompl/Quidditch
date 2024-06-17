@@ -152,11 +152,10 @@ public:
         .addPass(createIREEExpandStridedMetadataPass)
         .addPass(createCleanupBufferAllocViewPass);
 
-    modulePassManager.addPass(
-        quidditch::createHoistHALOpsToFuncPass({targetOptions.assertCompiled}));
+    modulePassManager.addPass(quidditch::createOutlineLinalgOpsToxDSLPass(
+        {targetOptions.assertCompiled}));
     FunctionLikeNest(modulePassManager)
         .addPass(createCanonicalizerPass)
-        .addPass(quidditch::createFilterForxDSLPass)
         .addPass([&] {
           return quidditch::createConvertToRISCVPass(
               {targetOptions.xDSLOptPath, targetOptions.assertCompiled});
