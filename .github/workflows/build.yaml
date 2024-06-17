@@ -46,7 +46,7 @@ jobs:
         uses: Chocobo1/setup-ccache-action@v1
         with:
           ccache_options: |
-            max_size=400M
+            max_size=600M
             compiler_check=none
 
       - name: Install Native Compilers
