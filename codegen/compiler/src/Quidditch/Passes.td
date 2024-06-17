@@ -51,4 +51,6 @@ def DisableQuidditchVariantPass : Pass<"quidditch-disable-variant",
   }];
 }
 
+def ReluToMaxPass : Pass<"quidditch-relu-to-max">;
+
 #endif
