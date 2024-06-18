@@ -25,6 +25,7 @@ iree_cc_library(
         "DisableQuidditchVariant.cpp"
         "OutlineLinalgOpsToxDSL.cpp"
         "LinkExecutables.cpp"
+        "ReluToMax.cpp"
         DEPS
         ::PassesIncGen
         MLIRFuncDialect

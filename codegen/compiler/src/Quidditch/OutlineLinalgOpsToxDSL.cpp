@@ -112,27 +112,6 @@ void OutlineLinalgOpsToxDSL::runOnOperation() {
       symbolTable.insert(outlinedFunction);
       kernelsGenerated.push_back(FlatSymbolRefAttr::get(outlinedFunction));
 
-      // TODO: Add support in xDSL for memrefs with dynamic components
-      //  (with calling convention support if needed).
-      // Need to check the types here explicitly as LLVM conversion will fail
-      // later otherwise.
-      if (!llvm::all_of(outlinedFunction.getArgumentTypes(),
-                        canUseBarepointerCC)) {
-        auto emit = assertCompiled ? &func::FuncOp::emitError
-                                   : &func::FuncOp::emitWarning;
-
-        (outlinedFunction.*emit)("function signature ")
-            << outlinedFunction.getFunctionType()
-            << " does not support bare-pointer calling convention required by "
-               "xDSL.";
-        // Set as if code generation failed.
-        outlinedFunction->removeAttr("xdsl_generated");
-        // Stop lying to make LLVM conversion succeed.
-        outlinedFunction->removeAttr("llvm.bareptr");
-        outlinedFunction.setPrivate();
-        return;
-      }
-
       {
         OpBuilder::InsertionGuard guard{builder};
         builder.setInsertionPointToStart(outlinedFunction.addEntryBlock());
@@ -149,6 +128,29 @@ void OutlineLinalgOpsToxDSL::runOnOperation() {
           builder.insert(op->clone(mapping));
 
         builder.create<func::ReturnOp>(builder.getUnknownLoc());
+      }
+
+      // TODO: Add support in xDSL for memrefs with dynamic components
+      //  (with calling convention support if needed).
+      // Need to check the types here explicitly as LLVM conversion will fail
+      // later otherwise. We purposefully do this after insertion of cloned ops
+      // to have the IR in the error message.
+      if (!llvm::all_of(outlinedFunction.getArgumentTypes(),
+                        canUseBarepointerCC)) {
+        auto emit = assertCompiled ? &func::FuncOp::emitError
+                                   : &func::FuncOp::emitWarning;
+
+        (outlinedFunction.*emit)("function signature ")
+            << outlinedFunction.getFunctionType()
+            << " does not support bare-pointer calling convention required by "
+               "xDSL.";
+        // Set as if code generation failed.
+        outlinedFunction->removeAttr("xdsl_generated");
+        // Stop lying to make LLVM conversion succeed.
+        outlinedFunction->removeAttr("llvm.bareptr");
+        outlinedFunction.setPrivate();
+        outlinedFunction.getBody().getBlocks().clear();
+        return;
       }
 
       OpBuilder::InsertionGuard guard{builder};
