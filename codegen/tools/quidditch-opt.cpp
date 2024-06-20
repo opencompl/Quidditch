@@ -1,6 +1,7 @@
 #include <iree/compiler/Tools/init_dialects.h>
 #include <mlir/Tools/mlir-opt/MlirOptMain.h>
 
+#include <Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h>
 #include <Quidditch/Target/Passes.h>
 
 namespace quidditch {
@@ -15,6 +16,7 @@ int main(int argc, char **argv) {
   // Be lazy and support all upstream dialects as input dialects.
   DialectRegistry registry;
   iree_compiler::registerAllDialects(registry);
+  registry.insert<quidditch::Snitch::QuidditchSnitchDialect>();
 
   quidditch::registerPasses();
 

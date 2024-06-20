@@ -1,7 +1,8 @@
 #include "Passes.h"
 
+#include "Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h"
 #include "iree/compiler/Dialect/HAL/IR/HALOps.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Interfaces/FunctionInterfaces.h"
 
 namespace quidditch {
 #define GEN_PASS_DEF_DISABLEQUIDDITCHVARIANTPASS
@@ -10,6 +11,7 @@ namespace quidditch {
 
 using namespace mlir;
 using namespace mlir::iree_compiler;
+using namespace quidditch::Snitch;
 
 namespace {
 class DisableQuidditchVariant
@@ -29,13 +31,18 @@ void DisableQuidditchVariant::runOnOperation() {
   IREE::HAL::ExecutableVariantOp operation = getOperation();
   ModuleOp module = operation.getInnerModule();
 
+  auto *dialect = getContext().getLoadedDialect<QuidditchSnitchDialect>();
+
   // If xDSL failed to compile the kernel, then disable this variant
   // permanently. While the code will later be replaced by the linker using
   // LLVM code, the dispatch code needs to also be informed to make sure that
   // the right workgroup sizes are used for the kernel.
-  for (auto func : module.getOps<LLVM::LLVMFuncOp>())
-    if (func->hasAttr("xdsl_generated") && func->hasAttr("riscv_assembly"))
-      return;
+  if (llvm::none_of(
+          module.getOps<FunctionOpInterface>(), [&](FunctionOpInterface func) {
+            return dialect->getXdslCompilationFailedAttrHelper().isAttrPresent(
+                func);
+          }))
+    return;
 
   OpBuilder builder(&getContext());
   operation.createConditionOp(builder);

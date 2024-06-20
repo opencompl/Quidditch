@@ -1,13 +1,7 @@
-#ifndef QUIDDITCH_PASSES
-#define QUIDDITCH_PASSES
+#ifndef QUIDDITCH_TARGET_PASSES
+#define QUIDDITCH_TARGET_PASSES
 
 include "mlir/Pass/PassBase.td"
-
-defvar assertCompiledOption =
-  Option<"assertCompiled", "assert-compiled", "bool", "false",
-         "If true, errors if any kernel could not be compiled with xDSL."
-         "Otherwise, removes the kernel from the output and emits a warning "
-         "instead.">;
 
 def OutlineLinalgOpsToxDSLPass
   : Pass<"quidditch-outline-linalg-ops-to-xdsl", "mlir::ModuleOp"> {
@@ -20,16 +14,6 @@ def OutlineLinalgOpsToxDSLPass
     `xdsl_kernels` which is an array of symbol references to the outlined
     functions.
   }];
-
-  let options = [assertCompiledOption];
-}
-
-def ConvertToRISCVPass : Pass<"quidditch-convert-to-riscv", "mlir::func::FuncOp"> {
-  let options = [
-    Option<"xDSLOptPath", "xdsl-opt-path", "std::string", [{""}],
-      "Path to the 'xdsl-opt' executable to use for kernel compilation.">,
-    assertCompiledOption,
-  ];
 }
 
 def LinkExecutablesPass : Pass<"quidditch-link-executables", "mlir::ModuleOp"> {

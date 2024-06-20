@@ -6,6 +6,8 @@
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
+#include "Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h"
+
 namespace quidditch {
 #define GEN_PASS_DEF_LINKEXECUTABLESPASS
 #include "Quidditch/Target/Passes.h.inc"
@@ -13,6 +15,7 @@ namespace quidditch {
 
 using namespace mlir;
 using namespace mlir::iree_compiler;
+using namespace quidditch::Snitch;
 
 namespace {
 class LinkExecutables
@@ -98,6 +101,8 @@ void LinkExecutables::runOnOperation() {
   if (!quidditchVariant || !llvmVariant)
     return;
 
+  auto *dialect = getContext().getLoadedDialect<QuidditchSnitchDialect>();
+
   std::size_t xDSLFunctionsReplaced = 0;
   std::size_t xDSLFunctionsEncountered = 0;
   // Replace quidditch functions that xDSL could not compile with LLVM
@@ -114,35 +119,12 @@ void LinkExecutables::runOnOperation() {
 
     xDSLFunctionsEncountered++;
 
-    auto attr = func->getAttrOfType<ArrayAttr>("xdsl_kernels");
-    if (!attr)
-      continue;
-
-    SmallVector<Operation *> toErase;
-    bool failed = false;
-    for (FlatSymbolRefAttr ref : attr.getAsRange<FlatSymbolRefAttr>()) {
-      // xDSL kernel is considered having failed to compile if it does not
-      // exist or does not have a body yet no 'riscv_assembly' either.
-      auto xdslFuncOp = quidditchTable.lookup<LLVM::LLVMFuncOp>(ref.getAttr());
-      if (xdslFuncOp && xdslFuncOp->hasAttrOfType<StringAttr>("riscv_assembly"))
-        continue;
-
-      if (xdslFuncOp && !xdslFuncOp.empty())
-        continue;
-
-      failed = true;
-      if (xdslFuncOp)
-        toErase.push_back(xdslFuncOp);
-    }
-    if (!failed)
+    if (!dialect->getXdslCompilationFailedAttrHelper().isAttrPresent(func))
       continue;
 
     auto llvmFuncOp = llvmTable.lookup<LLVM::LLVMFuncOp>(symName);
     if (!llvmFuncOp)
       continue;
-
-    for (Operation *op : toErase)
-      op->erase();
 
     xDSLFunctionsReplaced++;
 
