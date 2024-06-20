@@ -6,6 +6,8 @@
 #include <mlir/IR/IRMapping.h>
 #include <mlir/IR/Matchers.h>
 
+#include "Quidditch/Dialect/Snitch/QuidditchSnitchOps.h"
+
 namespace quidditch {
 #define GEN_PASS_DEF_OUTLINELINALGOPSTOXDSLPASS
 #include "Quidditch/Passes.h.inc"
@@ -64,14 +66,13 @@ void OutlineLinalgOpsToxDSL::runOnOperation() {
     func->setAttr("xdsl_optimized", builder.getUnitAttr());
     func.setSymName((func.getSymName() + "$iree_to_xdsl").str());
 
-    auto outlineOpsToFunction = [&](SmallVectorImpl<Operation *> &ops) {
+    auto outlineOpsToFunction = [&](MutableArrayRef<linalg::GenericOp> ops) {
       if (ops.empty())
         return;
 
       auto exit = llvm::make_scope_exit([&] {
         for (Operation *op : ops)
           op->erase();
-        ops.clear();
       });
       std::reverse(ops.begin(), ops.end());
 
@@ -98,6 +99,31 @@ void OutlineLinalgOpsToxDSL::runOnOperation() {
               requiredArguments.insert(operand);
           }
         });
+
+      {
+        OpBuilder::InsertionGuard guard{builder};
+        builder.setInsertionPoint(ops.front());
+
+        auto kernelOp = builder.create<quidditch::Snitch::XDSLKernelOp>(
+            ops.front()->getLoc(), /*results=*/TypeRange(),
+            /*inputs=*/requiredArguments.getArrayRef(), ValueRange());
+
+        Block *block = kernelOp.createEntryBlock();
+        builder.setInsertionPointToStart(block);
+
+        IRMapping mapping;
+        for (auto [old, newV] :
+             llvm::zip_equal(requiredArguments, block->getArguments()))
+          mapping.map(old, newV);
+
+        for (Operation *constants : constantsToClone)
+          builder.insert(constants->clone(mapping));
+
+        for (Operation *op : ops)
+          builder.insert(op->clone(mapping));
+
+        return;
+      }
 
       auto outlinedFunction = builder.create<func::FuncOp>(
           builder.getUnknownLoc(), (func.getSymName() + "$xDSL_kernel").str(),
@@ -159,14 +185,10 @@ void OutlineLinalgOpsToxDSL::runOnOperation() {
                                    requiredArguments.getArrayRef());
     };
 
+    SmallVector<linalg::GenericOp> outlinedOps;
     for (Block &block : func.getBody()) {
-      SmallVector<Operation *> outlinedOps;
-      for (Operation &op : llvm::reverse(block)) {
-        if (supportedByxDSL(&op))
-          outlinedOps.push_back(&op);
-        else
-          outlineOpsToFunction(outlinedOps);
-      }
+      auto range = llvm::reverse(block.getOps<linalg::GenericOp>());
+      outlinedOps.assign(range.begin(), range.end());
       outlineOpsToFunction(outlinedOps);
     }
 

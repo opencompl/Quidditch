@@ -8,7 +8,7 @@
 
 namespace quidditch {
 #define GEN_PASS_DEF_LINKEXECUTABLESPASS
-#include "Quidditch/Passes.h.inc"
+#include "Quidditch/Target/Passes.h.inc"
 } // namespace quidditch
 
 using namespace mlir;
