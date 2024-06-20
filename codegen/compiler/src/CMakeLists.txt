@@ -1,3 +1,4 @@
 iree_setup_c_src_root(IMPLICIT_DEFS_TARGET quidditch_defs)
 
-add_subdirectory(Quidditch)
+iree_add_all_subdirs()
+
