@@ -21,13 +21,13 @@ iree_cc_library(
         "Passes.h"
         "Passes.h.inc"
         SRCS
-        "ConvertToRISCV.cpp"
         "DisableQuidditchVariant.cpp"
         "OutlineLinalgOpsToxDSL.cpp"
         "LinkExecutables.cpp"
         "ReluToMax.cpp"
         DEPS
         ::PassesIncGen
+        Quidditch::Dialect::Snitch::QuidditchSnitchDialect
         MLIRFuncDialect
         MLIRIR
         iree::compiler::Dialect::HAL::IR
@@ -40,6 +40,7 @@ iree_cc_library(
         "QuidditchTarget.cpp"
         DEPS
         ::Passes
+        Quidditch::Conversion::ConvertToRISCV
         IREELinalgTransformDialect
         LLVMAnalysis
         LLVMBitReader

@@ -6,12 +6,16 @@
 #include <mlir/IR/IRMapping.h>
 #include <mlir/IR/Matchers.h>
 
+#include <Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h>
+#include <Quidditch/Dialect/Snitch/QuidditchSnitchOps.h>
+
 namespace quidditch {
 #define GEN_PASS_DEF_OUTLINELINALGOPSTOXDSLPASS
 #include "Quidditch/Target/Passes.h.inc"
 } // namespace quidditch
 
 using namespace mlir;
+using namespace quidditch::Snitch;
 
 namespace {
 class OutlineLinalgOpsToxDSL
@@ -24,25 +28,6 @@ protected:
   void runOnOperation() override;
 };
 } // namespace
-
-static bool canUseBarepointerCC(Type type) {
-  auto memRef = dyn_cast<MemRefType>(type);
-  if (!memRef)
-    return true;
-  if (isa<UnrankedMemRefType>(memRef))
-    return false;
-
-  int64_t offset = 0;
-  SmallVector<int64_t, 4> strides;
-  if (failed(getStridesAndOffset(memRef, strides, offset)))
-    return false;
-
-  for (int64_t stride : strides)
-    if (ShapedType::isDynamic(stride))
-      return false;
-
-  return !ShapedType::isDynamic(offset);
-}
 
 static bool supportedByxDSL(Operation *operation) {
   return isa<linalg::GenericOp>(operation);
@@ -60,8 +45,8 @@ void OutlineLinalgOpsToxDSL::runOnOperation() {
     if (func.getFunctionType() != emptyFunctionType || !func.isPublic())
       continue;
 
-    SmallVector<Attribute> kernelsGenerated;
-    func->setAttr("xdsl_optimized", builder.getUnitAttr());
+    // We add this suffix for tooling to know whether the kernel was xDSL
+    // compiled.
     func.setSymName((func.getSymName() + "$iree_to_xdsl").str());
 
     auto outlineOpsToFunction = [&](SmallVectorImpl<Operation *> &ops) {
@@ -99,26 +84,19 @@ void OutlineLinalgOpsToxDSL::runOnOperation() {
           }
         });
 
-      auto outlinedFunction = builder.create<func::FuncOp>(
-          builder.getUnknownLoc(), (func.getSymName() + "$xDSL_kernel").str(),
-          builder.getFunctionType(
-              llvm::map_to_vector(requiredArguments,
-                                  std::mem_fn(&Value::getType)),
-              {}));
-
-      // xDSL only supports barepointer lowering right now.
-      outlinedFunction->setAttr("llvm.bareptr", builder.getUnitAttr());
-      outlinedFunction->setAttr("xdsl_generated", builder.getUnitAttr());
-      symbolTable.insert(outlinedFunction);
-      kernelsGenerated.push_back(FlatSymbolRefAttr::get(outlinedFunction));
-
       {
         OpBuilder::InsertionGuard guard{builder};
-        builder.setInsertionPointToStart(outlinedFunction.addEntryBlock());
+        builder.setInsertionPoint(ops.front());
+
+        auto kernelOp = builder.create<quidditch::Snitch::XDSLKernelOp>(
+            ops.front()->getLoc(), requiredArguments.getArrayRef());
+
+        Block *block = kernelOp.createEntryBlock();
+        builder.setInsertionPointToStart(block);
 
         IRMapping mapping;
-        for (auto [old, newV] : llvm::zip_equal(
-                 requiredArguments, outlinedFunction.getArguments()))
+        for (auto [old, newV] :
+             llvm::zip_equal(requiredArguments, block->getArguments()))
           mapping.map(old, newV);
 
         for (Operation *constants : constantsToClone)
@@ -127,36 +105,8 @@ void OutlineLinalgOpsToxDSL::runOnOperation() {
         for (Operation *op : ops)
           builder.insert(op->clone(mapping));
 
-        builder.create<func::ReturnOp>(builder.getUnknownLoc());
-      }
-
-      // TODO: Add support in xDSL for memrefs with dynamic components
-      //  (with calling convention support if needed).
-      // Need to check the types here explicitly as LLVM conversion will fail
-      // later otherwise. We purposefully do this after insertion of cloned ops
-      // to have the IR in the error message.
-      if (!llvm::all_of(outlinedFunction.getArgumentTypes(),
-                        canUseBarepointerCC)) {
-        auto emit = assertCompiled ? &func::FuncOp::emitError
-                                   : &func::FuncOp::emitWarning;
-
-        (outlinedFunction.*emit)("function signature ")
-            << outlinedFunction.getFunctionType()
-            << " does not support bare-pointer calling convention required by "
-               "xDSL.";
-        // Set as if code generation failed.
-        outlinedFunction->removeAttr("xdsl_generated");
-        // Stop lying to make LLVM conversion succeed.
-        outlinedFunction->removeAttr("llvm.bareptr");
-        outlinedFunction.setPrivate();
-        outlinedFunction.getBody().getBlocks().clear();
         return;
       }
-
-      OpBuilder::InsertionGuard guard{builder};
-      builder.setInsertionPoint(ops.front());
-      builder.create<func::CallOp>(builder.getUnknownLoc(), outlinedFunction,
-                                   requiredArguments.getArrayRef());
     };
 
     for (Block &block : func.getBody()) {
@@ -169,7 +119,5 @@ void OutlineLinalgOpsToxDSL::runOnOperation() {
       }
       outlineOpsToFunction(outlinedOps);
     }
-
-    func->setAttr("xdsl_kernels", builder.getArrayAttr(kernelsGenerated));
   }
 }

@@ -20,6 +20,9 @@
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
 
+#include "Quidditch/Conversion/Passes.h"
+#include "Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h"
+
 #include "compiler/plugins/target/LLVMCPU/LibraryBuilder.h"
 #include "compiler/plugins/target/LLVMCPU/LinkerTool.h"
 #include "compiler/plugins/target/LLVMCPU/StaticLibraryGenerator.h"
@@ -38,6 +41,7 @@
 
 using namespace mlir;
 using namespace mlir::iree_compiler;
+using namespace quidditch::Snitch;
 
 namespace {
 
@@ -114,10 +118,8 @@ public:
     mlir::registerBuiltinDialectTranslation(registry);
     mlir::registerLLVMDialectTranslation(registry);
 
-    // clang-format off
-    registry.insert<arm_neon::ArmNeonDialect,
-                    arm_sme::ArmSMEDialect>();
-    // clang-format on
+    registry.insert<arm_neon::ArmNeonDialect, arm_sme::ArmSMEDialect,
+                    quidditch::Snitch::QuidditchSnitchDialect>();
   }
 
   void getDefaultExecutableTargets(
@@ -152,15 +154,13 @@ public:
         .addPass(createIREEExpandStridedMetadataPass)
         .addPass(createCleanupBufferAllocViewPass);
 
-    modulePassManager.addPass(quidditch::createOutlineLinalgOpsToxDSLPass(
-        {targetOptions.assertCompiled}));
+    modulePassManager.addPass(quidditch::createOutlineLinalgOpsToxDSLPass());
     FunctionLikeNest(modulePassManager)
         .addPass(quidditch::createReluToMaxPass)
-        .addPass(createCanonicalizerPass)
-        .addPass([&] {
-          return quidditch::createConvertToRISCVPass(
-              {targetOptions.xDSLOptPath, targetOptions.assertCompiled});
-        })
+        .addPass(createCanonicalizerPass);
+    modulePassManager.addPass(quidditch::createConvertToRISCVPass(
+        {targetOptions.xDSLOptPath, targetOptions.assertCompiled}));
+    FunctionLikeNest(modulePassManager)
         .addPass(arith::createArithExpandOpsPass)
         .addPass(memref::createExpandOpsPass)
         .addPass(memref::createFoldMemRefAliasOpsPass)
@@ -197,10 +197,13 @@ public:
   FailureOr<SmallVector<IREE::HAL::Artifact>>
   assembleXDSLOutput(ModuleOp module) {
 
+    auto *dialect =
+        module.getContext()->getLoadedDialect<QuidditchSnitchDialect>();
+
     SmallVector<IREE::HAL::Artifact> objectFiles;
     for (auto func :
          llvm::make_early_inc_range(module.getOps<LLVM::LLVMFuncOp>())) {
-      auto assembly = func->getAttrOfType<StringAttr>("riscv_assembly");
+      auto assembly = dialect->getRiscvAssemblyAttrHelper().getAttr(func);
       if (!assembly)
         continue;
 
