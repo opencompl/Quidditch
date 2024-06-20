@@ -53,11 +53,4 @@ def DisableQuidditchVariantPass : Pass<"quidditch-disable-variant",
 
 def ReluToMaxPass : Pass<"quidditch-relu-to-max">;
 
-def TileForL1Pass : Pass<"quidditch-tile-for-l1"> {
-  let options = [
-    Option<"l1CacheSize", "l1-cache-sizeo", "std::string", [{""}],
-      "Path to the 'xdsl-opt' executable to use for kernel compilation.">,
-  ];
-}
-
 #endif
