@@ -1,0 +1,80 @@
+iree_compiler_register_plugin(
+        PLUGIN_ID
+        hal_target_quidditch
+        TARGET
+        ::Quidditch
+)
+
+iree_tablegen_library(
+        NAME
+        PassesIncGen
+        TD_FILE
+        "Passes.td"
+        OUTS
+        --gen-pass-decls Passes.h.inc
+)
+
+iree_cc_library(
+        NAME
+        Passes
+        HDRS
+        "Passes.h"
+        "Passes.h.inc"
+        SRCS
+        "ConvertToRISCV.cpp"
+        "DisableQuidditchVariant.cpp"
+        "OutlineLinalgOpsToxDSL.cpp"
+        "LinkExecutables.cpp"
+        "ReluToMax.cpp"
+        DEPS
+        ::PassesIncGen
+        MLIRFuncDialect
+        MLIRIR
+        iree::compiler::Dialect::HAL::IR
+)
+
+iree_cc_library(
+        NAME
+        Quidditch
+        SRCS
+        "QuidditchTarget.cpp"
+        DEPS
+        ::Passes
+        Quidditch::Dialect::Snitch::QuidditchSnitchDialect
+        IREELinalgTransformDialect
+        LLVMAnalysis
+        LLVMBitReader
+        LLVMBitWriter
+        LLVMCore
+        LLVMLinker
+        LLVMSupport
+        LLVMTargetParser
+        LLVMRISCVAsmParser
+        LLVMRISCVCodeGen
+        LLVMRISCVDesc
+        LLVMRISCVInfo
+        MLIRArmNeonDialect
+        MLIRArmSMEDialect
+        MLIRArmSMEToLLVMIRTranslation
+        MLIRBuiltinToLLVMIRTranslation
+        MLIRIR
+        MLIRLLVMDialect
+        MLIRLLVMToLLVMIRTranslation
+        MLIRPDLDialect
+        MLIRPDLInterpDialect
+        MLIRSupport
+        MLIRTargetLLVMIRExport
+        MLIRTransformDialect
+        iree::compiler::Codegen::Common
+        iree::compiler::Codegen::Dialect::Codegen::IR::IREECodegenDialect
+        iree::compiler::Codegen::LLVMCPU
+        iree::compiler::Codegen::Utils
+        iree::compiler::Dialect::HAL::Target
+        iree::compiler::Dialect::HAL::Utils::LLVMLinkerUtils
+        iree::compiler::Dialect::LinalgExt::IR
+        iree::compiler::Dialect::Util::IR
+        iree::compiler::PluginAPI
+        iree::compiler::Utils
+        iree::compiler::plugins::target::LLVMCPU
+        PUBLIC
+)
