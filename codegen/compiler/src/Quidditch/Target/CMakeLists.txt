@@ -40,7 +40,6 @@ iree_cc_library(
         "QuidditchTarget.cpp"
         DEPS
         ::Passes
-        Quidditch::Dialect::Snitch::QuidditchSnitchDialect
         IREELinalgTransformDialect
         LLVMAnalysis
         LLVMBitReader
