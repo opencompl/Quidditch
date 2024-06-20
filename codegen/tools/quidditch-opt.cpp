@@ -1,7 +1,7 @@
 #include <iree/compiler/Tools/init_dialects.h>
 #include <mlir/Tools/mlir-opt/MlirOptMain.h>
 
-#include <Quidditch/Passes.h>
+#include <Quidditch/Target/Passes.h>
 
 namespace quidditch {
 #define GEN_PASS_REGISTRATION
