@@ -1,6 +1,5 @@
 #include "Passes.h"
 
-#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -30,7 +29,7 @@ protected:
   void runOnOperation() override;
 
 private:
-  FailureOr<StringAttr> convertToRISCVAssembly(XDSLKernelOp kernelOp,
+  FailureOr<StringAttr> convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
                                                StringAttr kernelName);
 };
 } // namespace
@@ -55,12 +54,12 @@ static bool canUseBarepointerCC(Type type) {
 }
 
 FailureOr<StringAttr>
-ConvertToRISCV::convertToRISCVAssembly(XDSLKernelOp kernelOp,
+ConvertToRISCV::convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
                                        StringAttr kernelName) {
   if (!llvm::all_of(kernelOp.getBody().getArgumentTypes(),
                     canUseBarepointerCC)) {
-    auto emit =
-        assertCompiled ? &XDSLKernelOp::emitError : &XDSLKernelOp::emitWarning;
+    auto emit = assertCompiled ? &MemRefMicrokernelOp::emitError
+                               : &MemRefMicrokernelOp::emitWarning;
 
     (kernelOp.*emit)("function inputs ")
         << kernelOp.getBody().getArgumentTypes()
@@ -72,11 +71,17 @@ ConvertToRISCV::convertToRISCVAssembly(XDSLKernelOp kernelOp,
   OpBuilder builder(&getContext());
   OwningOpRef<func::FuncOp> tempFuncOp = builder.create<func::FuncOp>(
       kernelOp.getLoc(), kernelName,
-      builder.getFunctionType(kernelOp.getBody().getArgumentTypes(), {}));
+      builder.getFunctionType(kernelOp.getBody().getArgumentTypes(),
+                              kernelOp.getResultTypes()));
   IRMapping mapping;
   kernelOp.getBody().cloneInto(&tempFuncOp->getBody(), mapping);
   builder.setInsertionPointToEnd(&tempFuncOp->getBody().back());
-  builder.create<func::ReturnOp>(kernelOp.getLoc());
+  tempFuncOp->getBody().back().getTerminator()->erase();
+
+  SmallVector<Value> returns;
+  for (Value value : kernelOp.getYieldOp().getResults())
+    returns.push_back(mapping.lookupOrDefault(value));
+  builder.create<func::ReturnOp>(kernelOp.getLoc(), returns);
 
   SmallString<64> stdinFile;
   int stdinFd;
@@ -144,9 +149,7 @@ void ConvertToRISCV::runOnOperation() {
   auto *dialect = getContext().getLoadedDialect<QuidditchSnitchDialect>();
 
   std::size_t kernelIndex = 0;
-  module.walk([&](XDSLKernelOp kernelOp) {
-    auto exit = llvm::make_scope_exit([&] { kernelOp.erase(); });
-
+  module.walk([&](MemRefMicrokernelOp kernelOp) {
     auto parentFuncOp = kernelOp->getParentOfType<func::FuncOp>();
     auto kernelName = StringAttr::get(
         &getContext(), llvm::formatv("{0}$xdsl_kernel{1}",
@@ -161,17 +164,22 @@ void ConvertToRISCV::runOnOperation() {
         return WalkResult::interrupt();
       }
 
+      auto containedFunc = kernelOp->getParentOfType<func::FuncOp>();
       dialect->getXdslCompilationFailedAttrHelper().setAttr(
-          kernelOp->getParentOfType<func::FuncOp>(),
-          UnitAttr::get(&getContext()));
-      return WalkResult::advance();
+          containedFunc, UnitAttr::get(&getContext()));
+      // The function is in an invalid state now that we cannot lower. Work
+      // around this by erasing the body completely.
+      containedFunc.setPrivate();
+      containedFunc.getBody().getBlocks().clear();
+      return WalkResult::interrupt();
     }
 
     auto builder = OpBuilder::atBlockEnd(module.getBody());
 
     auto kernelDecl = builder.create<func::FuncOp>(
         kernelOp.getLoc(), kernelName,
-        builder.getFunctionType(kernelOp.getBody().getArgumentTypes(), {}));
+        builder.getFunctionType(kernelOp.getBody().getArgumentTypes(),
+                                kernelOp.getResultTypes()));
 
     kernelDecl.setVisibility(SymbolTable::Visibility::Private);
     // Required to tell the conversion pass to LLVM that this is actually a
@@ -183,8 +191,10 @@ void ConvertToRISCV::runOnOperation() {
     dialect->getRiscvAssemblyAttrHelper().setAttr(kernelDecl, *riscvAssembly);
 
     builder.setInsertionPoint(kernelOp);
-    builder.create<func::CallOp>(kernelOp.getLoc(), kernelDecl,
-                                 kernelOp.getInputs());
+    auto callOp = builder.create<func::CallOp>(kernelOp.getLoc(), kernelDecl,
+                                               kernelOp.getInputs());
+    kernelOp.replaceAllUsesWith(callOp);
+    kernelOp.erase();
     return WalkResult::advance();
   });
 }

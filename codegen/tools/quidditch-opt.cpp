@@ -4,6 +4,8 @@
 #include <Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h>
 #include <Quidditch/Target/Passes.h>
 
+#include "mlir/Dialect/Bufferization/Transforms/Passes.h"
+
 namespace quidditch {
 #define GEN_PASS_REGISTRATION
 #include "Quidditch/Target/Passes.h.inc"
@@ -19,6 +21,7 @@ int main(int argc, char **argv) {
   registry.insert<quidditch::Snitch::QuidditchSnitchDialect>();
 
   quidditch::registerPasses();
+  mlir::bufferization::registerBufferizationPasses();
 
   return mlir::asMainReturnCode(mlir::MlirOptMain(
       argc, argv, "MLIR modular optimizer driver\n", registry));
