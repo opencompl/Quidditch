@@ -7,6 +7,7 @@
 #include "iree/compiler/Codegen/Common/Passes.h"
 #include "iree/compiler/Codegen/LLVMCPU/Passes.h"
 #include "iree/compiler/Dialect/HAL/Target/TargetRegistry.h"
+#include "iree/compiler/Dialect/LinalgExt/Transforms/Passes.h"
 #include "mlir/Conversion/ComplexToStandard/ComplexToStandard.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Dialect/Arith/Transforms/Passes.h"
@@ -134,18 +135,40 @@ public:
                                     OpPassManager &passManager) override {
     OpPassManager &modulePassManager = passManager.nest<ModuleOp>();
 
-    // Bufferize to memref as that is what xDSL currently needs.
-    addCPUDefaultPassPipeline(modulePassManager.nest<func::FuncOp>());
+    FunctionLikeNest(modulePassManager)
+        .addPass([] { return createTileAndDistributeToWorkgroupsPass(); })
+        .addPass([] { return createConvertToDestinationPassingStylePass(); })
+        .addPass(createFoldAffineMinInDistributedLoopsPass)
+        .addPass(createCanonicalizerPass)
+        .addPass(createCSEPass)
+        .addPass(createFuseTensorPadWithConsumerPass)
+        .addPass(createConcretizePadResultShapePass);
+
+    modulePassManager.addPass(quidditch::createOutlineLinalgOpsToxDSLPass());
+    addCPUBufferizePasses(modulePassManager.nest<func::FuncOp>());
 
     // TODO: Remove the following pass and plumb support for
     // #hal.descriptor_type memory space through the stack.
     FunctionLikeNest(modulePassManager)
         .addPass(createEraseHALDescriptorTypeFromMemRefPass)
-        .addPass(createMemrefCopyToLinalgPass);
+        .addPass(quidditch::createReluToMaxPass)
+        .addPass(createCanonicalizerPass)
+        .addPass(createLinalgGeneralizeNamedOpsPass);
+
+    modulePassManager.addPass(quidditch::createConvertToRISCVPass(
+        {targetOptions.xDSLOptPath, targetOptions.assertCompiled}));
+
+    FunctionLikeNest(modulePassManager)
+        .addPass(IREE::LinalgExt::createLinalgExtToLoopsPass)
+        .addPass(createMemrefCopyToLinalgPass)
+        .addPass(createConvertLinalgToLoopsPass)
+        .addPass(createCanonicalizerPass)
+        .addPass(createCSEPass);
+
     addConstantBufferizePasses(modulePassManager);
+
     FunctionLikeNest(modulePassManager)
         .addPass(createFoldTensorExtractOpPass)
-        .addPass(createLinalgGeneralizeNamedOpsPass)
         // Handle complex operation conversion.
         .addPass(createConvertComplexToStandardPass)
         // math dialect elementary functions -> polynomial form.
@@ -154,12 +177,6 @@ public:
         .addPass(createIREEExpandStridedMetadataPass)
         .addPass(createCleanupBufferAllocViewPass);
 
-    modulePassManager.addPass(quidditch::createOutlineLinalgOpsToxDSLPass());
-    FunctionLikeNest(modulePassManager)
-        .addPass(quidditch::createReluToMaxPass)
-        .addPass(createCanonicalizerPass);
-    modulePassManager.addPass(quidditch::createConvertToRISCVPass(
-        {targetOptions.xDSLOptPath, targetOptions.assertCompiled}));
     FunctionLikeNest(modulePassManager)
         .addPass(arith::createArithExpandOpsPass)
         .addPass(memref::createExpandOpsPass)

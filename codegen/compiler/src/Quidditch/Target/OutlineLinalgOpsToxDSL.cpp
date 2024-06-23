@@ -1,6 +1,5 @@
 #include "Passes.h"
 
-#include <llvm/ADT/ScopeExit.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/IR/IRMapping.h>
@@ -29,10 +28,6 @@ protected:
 };
 } // namespace
 
-static bool supportedByxDSL(Operation *operation) {
-  return isa<linalg::GenericOp>(operation);
-}
-
 void OutlineLinalgOpsToxDSL::runOnOperation() {
   OpBuilder builder(&getContext());
   builder.setInsertionPointToEnd(getOperation().getBody());
@@ -49,74 +44,53 @@ void OutlineLinalgOpsToxDSL::runOnOperation() {
     // compiled.
     func.setSymName((func.getSymName() + "$iree_to_xdsl").str());
 
-    auto outlineOpsToFunction = [&](SmallVectorImpl<Operation *> &ops) {
-      if (ops.empty())
-        return;
+    auto outlineOpsToFunction =
+        [&](SmallVectorImpl<DestinationStyleOpInterface> &ops) {
+          if (ops.empty())
+            return;
 
-      auto exit = llvm::make_scope_exit([&] {
-        for (Operation *op : ops)
-          op->erase();
-        ops.clear();
-      });
-      std::reverse(ops.begin(), ops.end());
+          std::reverse(ops.begin(), ops.end());
 
-      // TODO: Logic in all of this assumes no results of ops are used outside
-      // the outlined operations.
+          SetVector<Value> escapingResults;
+          for (Operation *op : ops)
+            for (Value result : op->getResults())
+              for (OpOperand &use : result.getUses())
+                if (!llvm::is_contained(ops, use.getOwner()))
+                  escapingResults.insert(use.get());
 
-      DenseSet<Value> resultOfOps;
-      for (Operation *op : ops)
-        resultOfOps.insert(op->getResults().begin(), op->getResults().end());
+          OpBuilder::InsertionGuard guard{builder};
+          builder.setInsertionPoint(ops.front());
 
-      SetVector<Operation *> constantsToClone;
-      SetVector<Value> requiredArguments;
-      for (Operation *op : ops)
-        op->walk([&](Operation *operation) {
-          for (Value operand : operation->getOperands()) {
-            if (!operand.getParentRegion()->isAncestor(op->getParentRegion()))
-              continue;
+          auto kernelOp =
+              builder.create<quidditch::Snitch::TensorMicrokernelOp>(
+                  ops.front()->getLoc(),
+                  llvm::map_to_vector(escapingResults,
+                                      std::mem_fn(&Value::getType)));
 
-            if (matchPattern(operand, m_Constant())) {
-              constantsToClone.insert(operand.getDefiningOp());
-              continue;
-            }
-            if (!resultOfOps.contains(operand))
-              requiredArguments.insert(operand);
+          Block *block = &kernelOp.getBody().emplaceBlock();
+          builder.setInsertionPointToStart(block);
+
+          for (Operation *op : ops) {
+            op->remove();
+            builder.insert(op);
           }
-        });
 
-      {
-        OpBuilder::InsertionGuard guard{builder};
-        builder.setInsertionPoint(ops.front());
+          builder.create<MicrokernelYieldOp>(ops.back().getLoc(),
+                                             escapingResults.getArrayRef());
 
-        auto kernelOp = builder.create<quidditch::Snitch::XDSLKernelOp>(
-            ops.front()->getLoc(), requiredArguments.getArrayRef());
+          SmallVector<Value> vector = escapingResults.takeVector();
+          for (auto [index, value] : llvm::enumerate(vector))
+            value.replaceUsesWithIf(
+                kernelOp.getResult(index), [&](OpOperand &operand) {
+                  return operand.getOwner()->getParentRegion() !=
+                         &kernelOp.getBody();
+                });
+        };
 
-        Block *block = kernelOp.createEntryBlock();
-        builder.setInsertionPointToStart(block);
-
-        IRMapping mapping;
-        for (auto [old, newV] :
-             llvm::zip_equal(requiredArguments, block->getArguments()))
-          mapping.map(old, newV);
-
-        for (Operation *constants : constantsToClone)
-          builder.insert(constants->clone(mapping));
-
-        for (Operation *op : ops)
-          builder.insert(op->clone(mapping));
-
-        return;
-      }
-    };
-
+    SmallVector<DestinationStyleOpInterface> outlinedOps;
     for (Block &block : func.getBody()) {
-      SmallVector<Operation *> outlinedOps;
-      for (Operation &op : llvm::reverse(block)) {
-        if (supportedByxDSL(&op))
-          outlinedOps.push_back(&op);
-        else
-          outlineOpsToFunction(outlinedOps);
-      }
+      auto range = llvm::reverse(block.getOps<DestinationStyleOpInterface>());
+      outlinedOps.assign(range.begin(), range.end());
       outlineOpsToFunction(outlinedOps);
     }
   }
