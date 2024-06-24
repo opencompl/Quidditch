@@ -5,6 +5,7 @@
 #include <Quidditch/Target/Passes.h>
 
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
+#include "mlir/Transforms/Passes.h"
 
 namespace quidditch {
 #define GEN_PASS_REGISTRATION
@@ -22,6 +23,7 @@ int main(int argc, char **argv) {
 
   quidditch::registerPasses();
   mlir::bufferization::registerBufferizationPasses();
+  mlir::registerTransformsPasses();
 
   return mlir::asMainReturnCode(mlir::MlirOptMain(
       argc, argv, "MLIR modular optimizer driver\n", registry));

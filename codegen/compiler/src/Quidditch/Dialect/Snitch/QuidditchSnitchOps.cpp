@@ -1,6 +1,7 @@
 #include "QuidditchSnitchOps.h"
 
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
 
 #define GET_OP_CLASSES
@@ -183,6 +184,158 @@ LogicalResult MemRefMicrokernelOp::verify() {
   if (getBody().getArgumentTypes() != getInputs().getTypes())
     return emitOpError("type of arguments and inputs must match");
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// MemRefMicrokernelOp Canonicalization
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct RemoveDeadResults : OpRewritePattern<MemRefMicrokernelOp> {
+  using OpRewritePattern<MemRefMicrokernelOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MemRefMicrokernelOp op,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<bool> deadResults(op.getNumResults());
+    for (OpResult result : op.getResults())
+      if (result.use_empty())
+        deadResults[result.getResultNumber()] = true;
+
+    if (llvm::none_of(deadResults, [](auto value) { return value; }))
+      return failure();
+
+    SmallVector<Type> newResults;
+    for (auto [index, type] : llvm::enumerate(op.getResults().getTypes()))
+      if (!deadResults[index])
+        newResults.push_back(type);
+
+    auto replacement = rewriter.create<MemRefMicrokernelOp>(
+        op.getLoc(), newResults, op.getInputs());
+    rewriter.inlineRegionBefore(op.getBody(), replacement.getBody(),
+                                replacement.getBody().end());
+    MicrokernelYieldOp yieldOp = replacement.getYieldOp();
+    for (auto index :
+         llvm::reverse(llvm::seq<std::size_t>(0, deadResults.size())))
+      if (deadResults[index])
+        rewriter.modifyOpInPlace(yieldOp, [&, index = index] {
+          yieldOp.getResultsMutable().erase(index);
+        });
+
+    unsigned nextAliveIndex = 0;
+    for (auto [index, dead] : llvm::enumerate(deadResults)) {
+      if (dead)
+        continue;
+      rewriter.replaceAllUsesWith(op.getResult(index),
+                                  replacement.getResult(nextAliveIndex));
+      nextAliveIndex++;
+    }
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct SinkConstantArguments : OpRewritePattern<MemRefMicrokernelOp> {
+  using OpRewritePattern<MemRefMicrokernelOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MemRefMicrokernelOp op,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<std::pair<BlockArgument, Operation *>> constantOps;
+    for (auto [input, arg] :
+         llvm::zip(op.getInputs(), op.getBody().getArguments()))
+      if (matchPattern(input, m_Constant()))
+        constantOps.emplace_back(arg, input.getDefiningOp());
+
+    if (constantOps.empty())
+      return failure();
+
+    rewriter.modifyOpInPlace(op, [&] {
+      rewriter.setInsertionPointToStart(&op.getBody().front());
+      for (auto [repl, constantOp] : constantOps) {
+        Operation *clone = rewriter.clone(*constantOp);
+        repl.replaceAllUsesWith(clone->getResult(0));
+      }
+    });
+    return success();
+  }
+};
+
+struct ReplaceInvariantResults : OpRewritePattern<MemRefMicrokernelOp> {
+  using OpRewritePattern<MemRefMicrokernelOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MemRefMicrokernelOp op,
+                                PatternRewriter &rewriter) const override {
+    bool changed = false;
+    for (auto [result, yielded] :
+         llvm::zip_equal(op.getResults(), op.getYieldOp().getResults())) {
+      auto arg = dyn_cast<BlockArgument>(yielded);
+      if (!arg || !arg.getParentBlock()->isEntryBlock())
+        continue;
+      changed = true;
+      rewriter.replaceAllUsesWith(result, op.getInputs()[arg.getArgNumber()]);
+    }
+    return success(changed);
+  }
+};
+
+struct RemoveDeadArguments : OpRewritePattern<MemRefMicrokernelOp> {
+  using OpRewritePattern<MemRefMicrokernelOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MemRefMicrokernelOp op,
+                                PatternRewriter &rewriter) const override {
+    SmallVector<bool> deadArguments(op.getInputs().size());
+    for (BlockArgument arg : op.getBody().getArguments())
+      if (arg.use_empty())
+        deadArguments[arg.getArgNumber()] = true;
+
+    if (llvm::none_of(deadArguments, [](auto value) { return value; }))
+      return failure();
+
+    SmallVector<Value> newInputs;
+    for (auto [index, value] : llvm::enumerate(op.getInputs()))
+      if (!deadArguments[index])
+        newInputs.push_back(value);
+
+    auto replacement = rewriter.create<MemRefMicrokernelOp>(
+        op.getLoc(), op.getResults().getTypes(), newInputs);
+    rewriter.inlineRegionBefore(op.getBody(), replacement.getBody(),
+                                replacement.getBody().end());
+    rewriter.modifyOpInPlace(replacement, [&] {
+      replacement.getBody().front().eraseArguments([&](BlockArgument argument) {
+        return deadArguments[argument.getArgNumber()];
+      });
+    });
+
+    rewriter.replaceOp(op, replacement);
+    return success();
+  }
+};
+
+struct ReplaceIdenticalArguments : OpRewritePattern<MemRefMicrokernelOp> {
+  using OpRewritePattern<MemRefMicrokernelOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MemRefMicrokernelOp op,
+                                PatternRewriter &rewriter) const override {
+    bool changed = false;
+    llvm::SmallDenseMap<Value, BlockArgument> seenPreviously;
+    for (auto [input, blockArg] :
+         llvm::zip_equal(op.getInputs(), op.getBody().getArguments())) {
+      auto [iter, inserted] = seenPreviously.insert({input, blockArg});
+      if (inserted)
+        continue;
+
+      changed = true;
+      rewriter.replaceAllUsesWith(blockArg, iter->second);
+    }
+    return success(changed);
+  }
+};
+} // namespace
+
+void MemRefMicrokernelOp::getCanonicalizationPatterns(
+    RewritePatternSet &results, MLIRContext *context) {
+  results.insert<RemoveDeadResults, RemoveDeadArguments, SinkConstantArguments,
+                 ReplaceInvariantResults, ReplaceIdenticalArguments>(context);
 }
 
 //===----------------------------------------------------------------------===//

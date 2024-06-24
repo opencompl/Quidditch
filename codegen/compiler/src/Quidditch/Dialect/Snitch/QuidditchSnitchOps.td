@@ -71,6 +71,7 @@ def QuidditchSnitch_MemRefMicrokernelOp
   }];
 
   let hasVerifier = 1;
+  let hasCanonicalizer = 1;
 
   let extraClassDeclaration = [{
 
