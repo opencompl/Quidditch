@@ -23,6 +23,7 @@
 
 #include "Quidditch/Conversion/Passes.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
+#include "Quidditch/Dialect/Snitch/Transforms/Passes.h"
 
 #include "compiler/plugins/target/LLVMCPU/LibraryBuilder.h"
 #include "compiler/plugins/target/LLVMCPU/LinkerTool.h"
@@ -71,6 +72,7 @@ struct QuidditchTargetOptions {
   std::string xDSLOptPath;
   std::string toolChainRoot;
   bool assertCompiled = false;
+  unsigned l1MemoryBytes = 112640;
 
   void bindOptions(OptionsBinder &binder) {
     LLVMInitializeRISCVTarget();
@@ -103,6 +105,10 @@ struct QuidditchTargetOptions {
             "If true, errors if any kernel could not be compiled with xDSL."
             "Otherwise, removes the kernel from the output and emits a warning "
             "instead."));
+    binder.opt<unsigned>(
+        "iree-quidditch-l1-memory-bytes", l1MemoryBytes,
+        llvm::cl::cat(category),
+        llvm::cl::desc("Size of the useable L1 memory in bytes"));
   }
 };
 
@@ -160,6 +166,10 @@ public:
     // #hal.descriptor_type memory space through the stack.
     FunctionLikeNest(modulePassManager)
         .addPass(createEraseHALDescriptorTypeFromMemRefPass)
+        .addPass([&] {
+          return quidditch::Snitch::createLowerL1AllocationsPass(
+              {targetOptions.l1MemoryBytes, targetOptions.assertCompiled});
+        })
         .addPass(quidditch::createReluToMaxPass)
         .addPass(createCanonicalizerPass)
         .addPass(createLinalgGeneralizeNamedOpsPass);
