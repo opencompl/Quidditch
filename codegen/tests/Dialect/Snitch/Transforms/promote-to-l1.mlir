@@ -15,7 +15,7 @@ func.func @test(%a : tensor<32x32xf32>, %b : tensor<32x32xf32>) -> tensor<32x32x
     %r2 = linalg.matmul ins(%a, %b : tensor<32x32xf32>, tensor<32x32xf32>) outs(%e : tensor<32x32xf32>) -> tensor<32x32xf32>
     quidditch_snitch.microkernel_yield %r2 : tensor<32x32xf32>
   }
-  // CHECK: %[[R2:.*]] = quidditch_snitch.copy_l1_tensor %[[R]] from L1
+  // CHECK: %[[R2:.*]] = quidditch_snitch.copy_l1_tensor %[[R]] to L3
   // CHECK: return %[[R2]]
   return %r : tensor<32x32xf32>
 }

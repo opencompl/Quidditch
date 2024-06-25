@@ -103,7 +103,7 @@ def QuidditchSnitch_CopyL1TensorOp : QuidditchSnitch_Op<"copy_l1_tensor",
   let results = (outs AnyStaticShapeTensor:$result);
 
   let assemblyFormat = [{
-    $copy (`to` `L1` $transfer_to_l1^) : (`from` `L1`)? `:` type($copy) attr-dict
+    $copy `to` ( `L1` $transfer_to_l1^) : (`L3`)? `:` type($copy) attr-dict
   }];
 }
 
