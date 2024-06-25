@@ -3,6 +3,7 @@
 
 #include "Quidditch/Conversion/Passes.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
+#include "Quidditch/Dialect/Snitch/Transforms/Passes.h"
 #include "Quidditch/Target/Passes.h"
 
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
@@ -13,6 +14,10 @@ namespace quidditch {
 #include "Quidditch/Target/Passes.h.inc"
 #define GEN_PASS_REGISTRATION
 #include "Quidditch/Conversion/Passes.h.inc"
+namespace Snitch {
+#define GEN_PASS_REGISTRATION
+#include "Quidditch/Dialect/Snitch/Transforms/Passes.h.inc"
+} // namespace Snitch
 } // namespace quidditch
 
 using namespace mlir;
@@ -26,6 +31,7 @@ int main(int argc, char **argv) {
 
   quidditch::registerPasses();
   quidditch::registerConversionPasses();
+  quidditch::Snitch::registerTransformsPasses();
   mlir::bufferization::registerBufferizationPasses();
   mlir::registerTransformsPasses();
 
