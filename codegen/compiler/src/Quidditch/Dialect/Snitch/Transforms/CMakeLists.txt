@@ -14,6 +14,7 @@ iree_cc_library(
         "Passes.h"
         "Passes.h.inc"
         SRCS
+        "PromoteToL1.cpp"
         "LowerL1Allocations.cpp"
         DEPS
         ::PassesIncGen

@@ -36,7 +36,6 @@ int main() {
       .num_outputs = 1,
       .output_data = (void*[]){data},
       .output_sizes = (const iree_host_size_t[]){IREE_ARRAYSIZE(data)},
-      .device_allocator = l1_allocator(),
   };
 
   IREE_CHECK_OK(run_model(&config));

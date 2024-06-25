@@ -13,22 +13,6 @@
 #include <stack_decls.h>
 #include <team_decls.h>
 
-iree_allocator_t l1_allocator() {
-  uint32_t snrt_l1_start_addr();
-  uint32_t snrt_l1_end_addr();
-
-  static iree_allocator_inline_storage_t l1_arena;
-
-  l1_arena.buffer = (uint8_t*)snrt_l1_start_addr();
-  l1_arena.length = 0;
-  unsigned stack_size_per_core = snrt_get_stack_size_per_core();
-  l1_arena.capacity =
-      (snrt_l1_end_addr() - snrt_cluster_core_num() * stack_size_per_core) -
-      snrt_l1_start_addr();
-
-  return iree_allocator_inline_arena(&l1_arena);
-}
-
 static iree_status_t setup_instance_and_device(
     const model_config_t* config, iree_allocator_t host_allocator,
     iree_vm_instance_t** out_instance, iree_hal_device_t** out_device) {
@@ -48,9 +32,10 @@ static iree_status_t setup_instance_and_device(
   if (!iree_status_is_ok(result)) goto error_release_vm;
 
   iree_hal_allocator_t* device_allocator;
-  result = iree_hal_allocator_create_heap(iree_make_cstring_view("quidditch"),
-                                          config->device_allocator,
-                                          host_allocator, &device_allocator);
+  result =
+      iree_hal_allocator_create_heap(iree_make_cstring_view("quidditch"),
+                                     /*data_allocator=*/iree_allocator_system(),
+                                     host_allocator, &device_allocator);
   if (!iree_status_is_ok(result)) goto error_release_library_loader;
 
   quidditch_device_params_t params;

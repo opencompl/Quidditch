@@ -11,8 +11,7 @@ def QuidditchSnitch_L1EncodingAttr : QuidditchSnitch_Attr<"L1Encoding"> {
   let mnemonic = "l1_encoding";
 
   let description = [{
-    Attribute used as both encoding on a tensor and memory space on a memref
-    to denote either of these being in L1 memory.
+    Attribute used as memory space on a memref to denote it being in L1 memory.
   }];
 }
 
