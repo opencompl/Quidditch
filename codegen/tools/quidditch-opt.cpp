@@ -1,8 +1,9 @@
 #include <iree/compiler/Tools/init_dialects.h>
 #include <mlir/Tools/mlir-opt/MlirOptMain.h>
 
-#include <Quidditch/Target/Passes.h>
+#include "Quidditch/Conversion/Passes.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
+#include "Quidditch/Target/Passes.h"
 
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Transforms/Passes.h"
@@ -10,6 +11,8 @@
 namespace quidditch {
 #define GEN_PASS_REGISTRATION
 #include "Quidditch/Target/Passes.h.inc"
+#define GEN_PASS_REGISTRATION
+#include "Quidditch/Conversion/Passes.h.inc"
 } // namespace quidditch
 
 using namespace mlir;
@@ -22,6 +25,7 @@ int main(int argc, char **argv) {
   registry.insert<quidditch::Snitch::QuidditchSnitchDialect>();
 
   quidditch::registerPasses();
+  quidditch::registerConversionPasses();
   mlir::bufferization::registerBufferizationPasses();
   mlir::registerTransformsPasses();
 

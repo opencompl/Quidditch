@@ -6,7 +6,7 @@ iree_tablegen_library(
         TD_FILE
         "Passes.td"
         OUTS
-        --gen-pass-decls Passes.h.inc
+        -name=Conversion --gen-pass-decls Passes.h.inc
 )
 
 iree_cc_library(
@@ -22,4 +22,22 @@ iree_cc_library(
         Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
         MLIRFuncDialect
         MLIRIR
+)
+
+iree_cc_library(
+        NAME
+        ConvertSnitchToLLVM
+        HDRS
+        "Passes.h"
+        "Passes.h.inc"
+        SRCS
+        "ConvertSnitchToLLVM.cpp"
+        DEPS
+        ::PassesIncGen
+        Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
+        MLIRAnalysis
+        MLIRIR
+        MLIRLLVMCommonConversion
+        MLIRLLVMDialect
+        MLIRTransforms
 )

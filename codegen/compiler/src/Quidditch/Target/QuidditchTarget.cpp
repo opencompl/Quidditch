@@ -184,8 +184,8 @@ public:
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass);
 
-    modulePassManager.addPass(
-        createConvertToLLVMPass(/*reassociateFpReordering=*/false));
+    modulePassManager.addPass(quidditch::createConvertSnitchToLLVMPass());
+    modulePassManager.addPass(createConvertToLLVMPass({}));
     modulePassManager.addPass(createReconcileUnrealizedCastsPass());
     // We rely on MLIR symbol visibility being correct after this point and
     // need to mirror the LLVM linkage that was assigned during conversion.
