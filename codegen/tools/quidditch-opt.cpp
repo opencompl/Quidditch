@@ -1,8 +1,8 @@
 #include <iree/compiler/Tools/init_dialects.h>
 #include <mlir/Tools/mlir-opt/MlirOptMain.h>
 
-#include <Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h>
 #include <Quidditch/Target/Passes.h>
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Transforms/Passes.h"

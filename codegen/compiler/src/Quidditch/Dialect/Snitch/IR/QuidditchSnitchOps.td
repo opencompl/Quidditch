@@ -1,7 +1,7 @@
 #ifndef QUIDDITCH_DIALECT_SNITCH_QUIDDITCHSNITCHOPS
 #define QUIDDITCH_DIALECT_SNITCH_QUIDDITCHSNITCHOPS
 
-include "Quidditch/Dialect/Snitch/QuidditchSnitchDialect.td"
+include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.td"
 include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"

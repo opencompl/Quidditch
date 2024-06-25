@@ -4,8 +4,10 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
 
+#include "QuidditchSnitchAttrs.h"
+
 #define GET_OP_CLASSES
-#include "Quidditch/Dialect/Snitch/QuidditchSnitchOps.cpp.inc"
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.cpp.inc"
 
 using namespace mlir;
 using namespace mlir::bufferization;

@@ -19,7 +19,7 @@ iree_cc_library(
         "ConvertToRISCV.cpp"
         DEPS
         ::PassesIncGen
-        Quidditch::Dialect::Snitch::QuidditchSnitchDialect
+        Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
         MLIRFuncDialect
         MLIRIR
 )

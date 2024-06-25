@@ -5,8 +5,8 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Program.h"
 
-#include "Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h"
-#include "Quidditch/Dialect/Snitch/QuidditchSnitchOps.h"
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/IRMapping.h"
