@@ -361,3 +361,98 @@ void MemRefMicrokernelOp::getRegionInvocationBounds(
     ArrayRef<Attribute>, SmallVectorImpl<InvocationBounds> &invocationBounds) {
   invocationBounds.push_back({1, 1});
 }
+
+//===----------------------------------------------------------------------===//
+// CopyL1TensorOp::BufferizableOpInterface
+//===----------------------------------------------------------------------===//
+
+bool CopyL1TensorOp::resultBufferizesToMemoryWrite(
+    OpResult opResult, const bufferization::AnalysisState &state) {
+  FailureOr<BaseMemRefType> copyType =
+      bufferization::getBufferType(getCopy(), state.getOptions());
+  FailureOr<BaseMemRefType> allocType =
+      bufferization::getBufferType(getResult(), state.getOptions());
+  if (failed(copyType) || failed(allocType))
+    return true;
+
+  // No copy is performed unless the address space does not match.
+  // Copy in this context implies that we are writing to the result.
+  return *allocType != *copyType;
+}
+
+bool CopyL1TensorOp::bufferizesToMemoryRead(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  return true;
+}
+
+bool CopyL1TensorOp::bufferizesToMemoryWrite(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  // We do not write into the buffer we are copying.
+  return false;
+}
+
+AliasingValueList
+CopyL1TensorOp::getAliasingValues(OpOperand &opOperand,
+                                  const bufferization::AnalysisState &state) {
+  FailureOr<BaseMemRefType> allocType =
+      bufferization::getBufferType(getResult(), state.getOptions());
+  FailureOr<BaseMemRefType> copyType =
+      bufferization::getBufferType(getCopy(), state.getOptions());
+  if (failed(copyType) || failed(allocType))
+    // Assume worst case.
+    return {{getResult(), BufferRelation::Equivalent, false}};
+
+  // Always a brand-new allocation unless the address space matches.
+  if (*allocType == *copyType)
+    return {{getResult(), BufferRelation::Equivalent}};
+
+  return {};
+}
+
+FailureOr<BaseMemRefType>
+CopyL1TensorOp::getBufferType(Value value, const BufferizationOptions &options,
+                              SmallVector<Value> &invocationStack) {
+  return getMemRefTypeWithStaticIdentityLayout(
+      getType(),
+      getTransferToL1() ? L1EncodingAttr::get(getContext()) : nullptr);
+}
+
+LogicalResult CopyL1TensorOp::bufferize(RewriterBase &rewriter,
+                                        const BufferizationOptions &options) {
+  if (use_empty()) {
+    rewriter.eraseOp(*this);
+    return success();
+  }
+
+  FailureOr<Value> copyBuffer = getBuffer(rewriter, getCopy(), options);
+  if (failed(copyBuffer))
+    return failure();
+
+  FailureOr<BaseMemRefType> copyType =
+      bufferization::getBufferType(getCopy(), options);
+  if (failed(copyType))
+    return failure();
+
+  FailureOr<BaseMemRefType> allocType =
+      bufferization::getBufferType(getResult(), options);
+  if (failed(allocType))
+    return failure();
+
+  if (*allocType == *copyType) {
+    replaceOpWithBufferizedValues(rewriter, getOperation(), *copyBuffer);
+    return success();
+  }
+
+  FailureOr<Value> alloc = options.createAlloc(
+      rewriter, getLoc(), llvm::cast<MemRefType>(*allocType),
+      /*dynShape=*/ValueRange());
+  if (failed(alloc))
+    return failure();
+
+  if (failed(options.createMemCpy(rewriter, getLoc(), *copyBuffer, *alloc)))
+    return failure();
+
+  // Replace op.
+  replaceOpWithBufferizedValues(rewriter, getOperation(), *alloc);
+  return success();
+}

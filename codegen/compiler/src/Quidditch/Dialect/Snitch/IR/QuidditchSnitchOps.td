@@ -81,6 +81,32 @@ def QuidditchSnitch_MemRefMicrokernelOp
   }];
 }
 
+def QuidditchSnitch_CopyL1TensorOp : QuidditchSnitch_Op<"copy_l1_tensor",
+  [SameOperandsAndResultType,
+   DeclareOpInterfaceMethods<BufferizableOpInterface,
+    ["resultBufferizesToMemoryWrite", "bufferizesToMemoryRead",
+     "bufferizesToMemoryWrite", "getAliasingValues", "getBufferType",
+      "bufferize"]>]> {
+
+  let description = [{
+    Operation performing copies of tensors between memory spaces.
+    If `$transfer_to_l1` is true, then the op ensures that the resulting tensor
+    is in L1.
+    Otherwise, the output tensor is guaranteed to be in L3 memory.
+    This operation is a noop if `$copy` and `$result` are already in the same
+    memory space.
+  }];
+
+  // TODO: Not a big fan of the UnitAttr. This should be an enum.
+  let arguments = (ins AnyStaticShapeTensor:$copy, UnitAttr:$transfer_to_l1);
+
+  let results = (outs AnyStaticShapeTensor:$result);
+
+  let assemblyFormat = [{
+    $copy `to` ( `L1` $transfer_to_l1^) : (`L3`)? `:` type($copy) attr-dict
+  }];
+}
+
 def FlatI8MemRef : ConfinedType<MemRefOf<[I8]>, [HasStaticShapePred,
   HasAnyRankOfPred<[1]>], "one-dimensional i8 MemRef of a static size">;
 

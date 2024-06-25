@@ -13,6 +13,7 @@
 #include "mlir/Dialect/Arith/Transforms/Passes.h"
 #include "mlir/Dialect/ArmNeon/ArmNeonDialect.h"
 #include "mlir/Dialect/ArmSME/IR/ArmSME.h"
+#include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
@@ -160,7 +161,28 @@ public:
         .addPass(createConcretizePadResultShapePass);
 
     modulePassManager.addPass(quidditch::createOutlineLinalgOpsToxDSLPass());
-    addCPUBufferizePasses(modulePassManager.nest<func::FuncOp>());
+
+    BufferizationOptions::AllocationFn allocationFn =
+        [](OpBuilder &builder, Location loc, MemRefType memRefType,
+           ValueRange dynamicSizes, unsigned alignment) -> Value {
+      return builder.create<memref::AllocaOp>(
+          loc, memRefType, dynamicSizes, builder.getI64IntegerAttr(alignment));
+    };
+    BufferizationOptions::MemCpyFn memcpyFn =
+        [](OpBuilder &builder, Location loc, Value from, Value to) {
+          // TODO: DMA copy.
+          createLinalgCopyOp(builder, loc, from, to);
+          return success();
+        };
+
+    FunctionLikeNest(modulePassManager)
+        .addPass(createEliminateEmptyTensorsPass)
+        .addPass(bufferization::createEmptyTensorToAllocTensorPass)
+        .addPass(quidditch::Snitch::createPromoteToL1Pass)
+        .addPass([&] {
+          return createIREEComprehensiveBufferizePass(allocationFn, memcpyFn);
+        });
+    addIREEPostBufferizationPasses(modulePassManager.nest<func::FuncOp>());
 
     // TODO: Remove the following pass and plumb support for
     // #hal.descriptor_type memory space through the stack.

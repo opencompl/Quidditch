@@ -39,21 +39,8 @@ typedef struct {
   void** output_data;
   /// Number of elements for each array in 'output_data'.
   const iree_host_size_t* output_sizes;
-
-  /// Allocator to use for "device" allocation.
-  iree_allocator_t device_allocator;
 } model_config_t;
 
 /// Runs the given IREE module according to the config. Input and output data
 /// are copied into and out of the given memory.
 iree_status_t run_model(const model_config_t* config);
-
-/// Allocator which allocates within TCDM (L1) memory. Required for features
-/// such as streaming registers.
-iree_allocator_t l1_allocator(void);
-
-/// Allocator which allocates within DRAM (L3) memory. Uses 'malloc' and 'free'
-/// behind the scenes.
-static inline iree_allocator_t l3_allocator(void) {
-  return iree_allocator_system();
-}
