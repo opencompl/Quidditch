@@ -81,4 +81,16 @@ def QuidditchSnitch_MemRefMicrokernelOp
   }];
 }
 
+def FlatI8MemRef : ConfinedType<MemRefOf<[I8]>, [HasStaticShapePred,
+  HasAnyRankOfPred<[1]>], "one-dimensional i8 MemRef of a static size">;
+
+def QuidditchSnitch_L1MemoryViewOp : QuidditchSnitch_Op<"l1_memory_view",
+  [Pure]> {
+  let results = (outs FlatI8MemRef:$result);
+
+  let assemblyFormat = [{
+    `->` type($result) attr-dict
+  }];
+}
+
 #endif

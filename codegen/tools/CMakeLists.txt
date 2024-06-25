@@ -2,6 +2,8 @@ add_executable(quidditch-opt quidditch-opt.cpp)
 target_link_libraries(quidditch-opt
         PRIVATE
         MLIROptLib
+        Quidditch::Conversion::ConvertSnitchToLLVM
+        Quidditch::Conversion::ConvertToRISCV
         Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
         Quidditch::Target::Passes
         iree::compiler::Dialect::LinalgExt::IR

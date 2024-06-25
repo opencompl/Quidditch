@@ -41,6 +41,7 @@ iree_cc_library(
         DEPS
         ::Passes
         Quidditch::Conversion::ConvertToRISCV
+        Quidditch::Conversion::ConvertSnitchToLLVM
         IREELinalgTransformDialect
         LLVMAnalysis
         LLVMBitReader

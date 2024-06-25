@@ -127,8 +127,17 @@ public:
       MLIRContext *context, StringRef deviceID, DictionaryAttr deviceConfigAttr,
       SmallVectorImpl<IREE::HAL::ExecutableTargetAttr> &executableTargetAttrs)
       const override {
-    executableTargetAttrs.push_back(
-        IREE::HAL::ExecutableTargetAttr::get(context, "quidditch", "static"));
+
+    NamedAttrList list;
+    // Target attribute info used by the LLVM lowering.
+    // TODO: Ideally shouldn't be hardcoded.
+    list.append("data_layout",
+                StringAttr::get(context, "e-m:e-p:32:32-i64:64-n32-S128"));
+    list.append("target_triple",
+                StringAttr::get(context, "riscv32-unknown-elf"));
+    executableTargetAttrs.push_back(IREE::HAL::ExecutableTargetAttr::get(
+        context, StringAttr::get(context, "quidditch"),
+        StringAttr::get(context, "static"), list.getDictionary(context)));
   }
 
   void buildTranslationPassPipeline(IREE::HAL::ExecutableTargetAttr targetAttr,
@@ -184,8 +193,8 @@ public:
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass);
 
-    modulePassManager.addPass(
-        createConvertToLLVMPass(/*reassociateFpReordering=*/false));
+    modulePassManager.addPass(quidditch::createConvertSnitchToLLVMPass());
+    modulePassManager.addPass(createConvertToLLVMPass({}));
     modulePassManager.addPass(createReconcileUnrealizedCastsPass());
     // We rely on MLIR symbol visibility being correct after this point and
     // need to mirror the LLVM linkage that was assigned during conversion.
