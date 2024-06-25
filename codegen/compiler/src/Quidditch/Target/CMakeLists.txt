@@ -27,7 +27,7 @@ iree_cc_library(
         "ReluToMax.cpp"
         DEPS
         ::PassesIncGen
-        Quidditch::Dialect::Snitch::QuidditchSnitchDialect
+        Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
         MLIRFuncDialect
         MLIRIR
         iree::compiler::Dialect::HAL::IR

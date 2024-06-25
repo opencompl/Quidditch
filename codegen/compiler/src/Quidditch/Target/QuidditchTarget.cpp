@@ -22,7 +22,7 @@
 #include "mlir/Transforms/Passes.h"
 
 #include "Quidditch/Conversion/Passes.h"
-#include "Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h"
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 
 #include "compiler/plugins/target/LLVMCPU/LibraryBuilder.h"
 #include "compiler/plugins/target/LLVMCPU/LinkerTool.h"

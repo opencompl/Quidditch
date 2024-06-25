@@ -10,4 +10,4 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #define GET_OP_CLASSES
-#include "Quidditch/Dialect/Snitch/QuidditchSnitchOps.h.inc"
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h.inc"

@@ -6,7 +6,7 @@
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
-#include "Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h"
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 
 namespace quidditch {
 #define GEN_PASS_DEF_LINKEXECUTABLESPASS

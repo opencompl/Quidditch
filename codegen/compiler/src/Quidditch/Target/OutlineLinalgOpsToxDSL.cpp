@@ -5,8 +5,8 @@
 #include <mlir/IR/IRMapping.h>
 #include <mlir/IR/Matchers.h>
 
-#include <Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h>
-#include <Quidditch/Dialect/Snitch/QuidditchSnitchOps.h>
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h"
 
 namespace quidditch {
 #define GEN_PASS_DEF_OUTLINELINALGOPSTOXDSLPASS

@@ -11,6 +11,8 @@ def QuidditchSnitch_Dialect : Dialect {
     "mlir::StringAttr":$riscv_assembly,
     "mlir::UnitAttr":$xdsl_compilation_failed
   );
+
+  let useDefaultAttributePrinterParser = 1;
 }
 
 #endif

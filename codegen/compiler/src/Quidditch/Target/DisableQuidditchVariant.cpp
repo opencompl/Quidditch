@@ -1,6 +1,6 @@
 #include "Passes.h"
 
-#include "Quidditch/Dialect/Snitch/QuidditchSnitchDialect.h"
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "iree/compiler/Dialect/HAL/IR/HALOps.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
 
