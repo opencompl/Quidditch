@@ -93,7 +93,6 @@ void quidditch_dispatch_queue_workgroup(
   if (nextCoreToUse != snrt_cluster_compute_core_num()) return;
 
   quidditch_dispatch_execute_workgroups();
-  reset_workgroup_state();
 }
 
 void quidditch_dispatch_execute_workgroups() {
@@ -104,4 +103,5 @@ void quidditch_dispatch_execute_workgroups() {
   snrt_cluster_hw_barrier();
   // Then wait for workers to be done.
   snrt_cluster_hw_barrier();
+  reset_workgroup_state();
 }
