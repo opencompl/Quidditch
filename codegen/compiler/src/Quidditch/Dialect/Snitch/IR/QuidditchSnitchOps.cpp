@@ -363,6 +363,18 @@ void MemRefMicrokernelOp::getRegionInvocationBounds(
 }
 
 //===----------------------------------------------------------------------===//
+// CopyL1TensorOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult CopyL1TensorOp::fold(FoldAdaptor adaptor) {
+  if (auto source = getCopy().getDefiningOp<CopyL1TensorOp>()) {
+    getCopyMutable().set(source.getCopy());
+    return getResult();
+  }
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
 // CopyL1TensorOp::BufferizableOpInterface
 //===----------------------------------------------------------------------===//
 

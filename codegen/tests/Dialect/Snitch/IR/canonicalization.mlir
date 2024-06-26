@@ -58,3 +58,13 @@ func.func @identical_argument(%arg0 : i32) -> i32 {
   }
   return %0 : i32
 }
+
+// CHECK-LABEL: @double_copy
+// CHECK-SAME: %[[ARG0:[[:alnum:]]+]]
+func.func @double_copy(%arg0 : tensor<32xf64>) -> tensor<32xf64> {
+  // CHECK-NEXT: %[[R:.*]] = quidditch_snitch.copy_l1_tensor %[[ARG0]] to L1
+  %0 = quidditch_snitch.copy_l1_tensor %arg0 to L3 : tensor<32xf64>
+  %1 = quidditch_snitch.copy_l1_tensor %0 to L1 : tensor<32xf64>
+  // CHECK-NEXT: return %[[R]]
+  return %1 : tensor<32xf64>
+}
