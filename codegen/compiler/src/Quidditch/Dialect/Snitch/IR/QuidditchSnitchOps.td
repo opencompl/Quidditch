@@ -82,7 +82,7 @@ def QuidditchSnitch_MemRefMicrokernelOp
 }
 
 def QuidditchSnitch_CopyL1TensorOp : QuidditchSnitch_Op<"copy_l1_tensor",
-  [SameOperandsAndResultType,
+  [SameOperandsAndResultType, NoMemoryEffect,
    DeclareOpInterfaceMethods<BufferizableOpInterface,
     ["resultBufferizesToMemoryWrite", "bufferizesToMemoryRead",
      "bufferizesToMemoryWrite", "getAliasingValues", "getBufferType",
@@ -105,6 +105,8 @@ def QuidditchSnitch_CopyL1TensorOp : QuidditchSnitch_Op<"copy_l1_tensor",
   let assemblyFormat = [{
     $copy `to` ( `L1` $transfer_to_l1^) : (`L3`)? `:` type($copy) attr-dict
   }];
+
+  let hasFolder = 1;
 }
 
 def FlatI8MemRef : ConfinedType<MemRefOf<[I8]>, [HasStaticShapePred,
