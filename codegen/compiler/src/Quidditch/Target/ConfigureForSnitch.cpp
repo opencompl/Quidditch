@@ -31,25 +31,89 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
                                    Operation *rootOp) {
   return TypeSwitch<Operation *, LogicalResult>(rootOp)
       .Case<linalg::MatmulTransposeBOp>([&](linalg::LinalgOp op) {
-        if (funcOp.getName() !=
-            "main$async_dispatch_1_matmul_transpose_b_1x1200x400_f64")
-          return success();
+        if (funcOp.getName() ==
+            "main$async_dispatch_0_matmul_transpose_b_1x400x161_f64") {
+          SmallVector<int64_t> bounds(3, 0);
+          // Future subgroup distribution.
+          bounds[0] = 1;
+          // How many rows we are processing (0 to 400). Should fit in L1.
+          // Should be as high as possible for subgroup distribution.
+          // (Could almost be 40).
+          bounds[1] = 80;
 
-        SmallVector<int64_t> bounds(3, 0);
-        bounds[0] = 8;
-        // How many rows we are processing (0 to 1200). Should fit in L1.
-        // Should be as high as possible for subgroup distribution.
-        bounds[1] = 30;
-        // Reduction dimension (0 to 400). How many columns we are processing
-        // at once?
-        // Cannot be distributed. As wide as possible for FPU utilization of a
-        // single core.
-        bounds[2] = 0;
+          // Reduction dimension (0 to 161). How many columns are we processing
+          // at once?
+          // Cannot be distributed. As wide as possible for FPU utilization of a
+          // single core.
+          bounds[2] = 0;
 
-        TileSizesListType tileSizes = {bounds};
-        return setOpConfigAndEntryPointFnTranslation(
-            funcOp, rootOp, tileSizes,
-            IREE::Codegen::DispatchLoweringPassPipeline::None);
+          TileSizesListType tileSizes = {bounds};
+          return setOpConfigAndEntryPointFnTranslation(
+              funcOp, rootOp, tileSizes,
+              IREE::Codegen::DispatchLoweringPassPipeline::None);
+        }
+        if (funcOp.getName() ==
+            "main$async_dispatch_7_matmul_transpose_b_1x600x400_f64") {
+          SmallVector<int64_t> bounds(3, 0);
+          // Future subgroup distribution.
+          bounds[0] = 1;
+          // How many rows we are processing (0 to 600). Should fit in L1.
+          // Should be as high as possible for subgroup distribution.
+          // (Could almost be 40).
+          bounds[1] = 25;
+
+          // Reduction dimension (0 to 400). How many columns are we processing
+          // at once?
+          // Cannot be distributed. As wide as possible for FPU utilization of a
+          // single core.
+          bounds[2] = 0;
+
+          TileSizesListType tileSizes = {bounds};
+          return setOpConfigAndEntryPointFnTranslation(
+              funcOp, rootOp, tileSizes,
+              IREE::Codegen::DispatchLoweringPassPipeline::None);
+        }
+        if (funcOp.getName() ==
+            "main$async_dispatch_8_matmul_transpose_b_1x600x600_f64") {
+          SmallVector<int64_t> bounds(3, 0);
+          // Future subgroup distribution.
+          bounds[0] = 1;
+          // How many rows we are processing (0 to 600). Should fit in L1.
+          // Should be as high as possible for subgroup distribution.
+          bounds[1] = 20;
+
+          // Reduction dimension (0 to 600). How many columns are we processing
+          // at once?
+          // Cannot be distributed. As wide as possible for FPU utilization of a
+          // single core.
+          bounds[2] = 0;
+
+          TileSizesListType tileSizes = {bounds};
+          return setOpConfigAndEntryPointFnTranslation(
+              funcOp, rootOp, tileSizes,
+              IREE::Codegen::DispatchLoweringPassPipeline::None);
+        }
+        if (funcOp.getName() ==
+            "main$async_dispatch_1_matmul_transpose_b_1x1200x400_f64") {
+          SmallVector<int64_t> bounds(3, 0);
+          // Future subgroup distribution.
+          bounds[0] = 0;
+          // How many rows we are processing (0 to 1200). Should fit in L1.
+          // Should be as high as possible for subgroup distribution.
+          bounds[1] = 30;
+          // Reduction dimension (0 to 400). How many columns we are processing
+          // at once?
+          // Cannot be distributed. As wide as possible for FPU utilization of a
+          // single core.
+          bounds[2] = 0;
+
+          TileSizesListType tileSizes = {bounds};
+          return setOpConfigAndEntryPointFnTranslation(
+              funcOp, rootOp, tileSizes,
+              IREE::Codegen::DispatchLoweringPassPipeline::None);
+        }
+
+        return success();
       })
       .Default(success());
 }
