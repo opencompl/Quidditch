@@ -44,54 +44,57 @@ void OutlineLinalgOpsToxDSL::runOnOperation() {
     // compiled.
     func.setSymName((func.getSymName() + "$iree_to_xdsl").str());
 
-    auto outlineOpsToFunction =
-        [&](SmallVectorImpl<DestinationStyleOpInterface> &ops) {
-          if (ops.empty())
-            return;
+    auto outlineOpsToFunction = [&](SmallVectorImpl<linalg::LinalgOp> &ops) {
+      if (ops.empty())
+        return;
 
-          std::reverse(ops.begin(), ops.end());
+      std::reverse(ops.begin(), ops.end());
 
-          SetVector<Value> escapingResults;
-          for (Operation *op : ops)
-            for (Value result : op->getResults())
-              for (OpOperand &use : result.getUses())
-                if (!llvm::is_contained(ops, use.getOwner()))
-                  escapingResults.insert(use.get());
+      SetVector<Value> escapingResults;
+      for (Operation *op : ops)
+        for (Value result : op->getResults())
+          for (OpOperand &use : result.getUses())
+            if (!llvm::is_contained(ops, use.getOwner()))
+              escapingResults.insert(use.get());
 
-          OpBuilder::InsertionGuard guard{builder};
-          builder.setInsertionPoint(ops.front());
+      OpBuilder::InsertionGuard guard{builder};
+      builder.setInsertionPoint(ops.front());
 
-          auto kernelOp =
-              builder.create<quidditch::Snitch::TensorMicrokernelOp>(
-                  ops.front()->getLoc(),
-                  llvm::map_to_vector(escapingResults,
-                                      std::mem_fn(&Value::getType)));
+      auto kernelOp = builder.create<quidditch::Snitch::TensorMicrokernelOp>(
+          ops.front()->getLoc(),
+          llvm::map_to_vector(escapingResults, std::mem_fn(&Value::getType)));
 
-          Block *block = &kernelOp.getBody().emplaceBlock();
-          builder.setInsertionPointToStart(block);
+      Block *block = &kernelOp.getBody().emplaceBlock();
+      builder.setInsertionPointToStart(block);
 
-          for (Operation *op : ops) {
-            op->remove();
-            builder.insert(op);
-          }
+      for (Operation *op : ops) {
+        op->remove();
+        builder.insert(op);
+      }
 
-          builder.create<MicrokernelYieldOp>(ops.back().getLoc(),
-                                             escapingResults.getArrayRef());
+      builder.create<MicrokernelYieldOp>(ops.back().getLoc(),
+                                         escapingResults.getArrayRef());
 
-          SmallVector<Value> vector = escapingResults.takeVector();
-          for (auto [index, value] : llvm::enumerate(vector))
-            value.replaceUsesWithIf(
-                kernelOp.getResult(index), [&](OpOperand &operand) {
-                  return operand.getOwner()->getParentRegion() !=
-                         &kernelOp.getBody();
-                });
-        };
+      SmallVector<Value> vector = escapingResults.takeVector();
+      for (auto [index, value] : llvm::enumerate(vector))
+        value.replaceUsesWithIf(kernelOp.getResult(index),
+                                [&](OpOperand &operand) {
+                                  return !kernelOp.getBody().isAncestor(
+                                      operand.getOwner()->getParentRegion());
+                                });
+    };
 
-    SmallVector<DestinationStyleOpInterface> outlinedOps;
-    for (Block &block : func.getBody()) {
-      auto range = llvm::reverse(block.getOps<DestinationStyleOpInterface>());
-      outlinedOps.assign(range.begin(), range.end());
-      outlineOpsToFunction(outlinedOps);
-    }
+    SmallVector<linalg::LinalgOp> outlinedOps;
+    func.walk([&](Block *block) {
+      for (Operation &op : llvm::reverse(*block)) {
+        auto linalgOp = dyn_cast<linalg::LinalgOp>(op);
+        if (!linalgOp) {
+          outlineOpsToFunction(outlinedOps);
+          outlinedOps.clear();
+          continue;
+        }
+        outlinedOps.push_back(linalgOp);
+      }
+    });
   }
 }

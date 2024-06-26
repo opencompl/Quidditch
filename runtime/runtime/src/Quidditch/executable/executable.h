@@ -47,6 +47,8 @@ typedef struct quidditch_executable_t {
     const iree_hal_executable_library_v0_t* v0;
   } library;
 
+  bool is_llvm;
+
   iree_hal_pipeline_layout_t* layouts[];
 } quidditch_executable_t;
 

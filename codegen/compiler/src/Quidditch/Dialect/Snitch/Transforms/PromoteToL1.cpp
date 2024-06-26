@@ -39,18 +39,6 @@ void PromoteToL1::runOnOperation() {
   });
 
   getOperation()->walk([&](TensorMicrokernelOp microkernelOp) {
-    // Insert copies from the L1 result back to the buffer ahead of replacing
-    // tensors.
-    auto builder = OpBuilder(microkernelOp->getContext());
-    builder.setInsertionPointAfter(microkernelOp);
-    for (Value result : microkernelOp.getResults()) {
-      if (!isa<RankedTensorType>(result.getType()))
-        continue;
-
-      auto copyOp = builder.create<CopyL1TensorOp>(result.getLoc(), result);
-      result.replaceAllUsesExcept(copyOp->getResult(0), copyOp);
-    }
-
     SetVector<TypedValue<RankedTensorType>> nonL1Uses;
     microkernelOp->walk([&](Operation *operation) {
       for (Value operand : operation->getOperands())
@@ -63,7 +51,7 @@ void PromoteToL1::runOnOperation() {
       return;
 
     // Create copies into L1 for all tensors used in the kernel.
-    builder = OpBuilder(microkernelOp);
+    auto builder = OpBuilder(microkernelOp);
     for (TypedValue<RankedTensorType> value : nonL1Uses) {
       auto copyOp = builder.create<CopyL1TensorOp>(microkernelOp.getLoc(),
                                                    /*copy=*/value,

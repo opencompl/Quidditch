@@ -21,9 +21,10 @@ iree_cc_library(
         "Passes.h"
         "Passes.h.inc"
         SRCS
+        "ConfigureForSnitch.cpp"
         "DisableQuidditchVariant.cpp"
-        "OutlineLinalgOpsToxDSL.cpp"
         "LinkExecutables.cpp"
+        "OutlineLinalgOpsToxDSL.cpp"
         "ReluToMax.cpp"
         DEPS
         ::PassesIncGen

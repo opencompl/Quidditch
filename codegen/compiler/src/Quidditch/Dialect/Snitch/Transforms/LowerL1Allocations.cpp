@@ -71,6 +71,7 @@ void LowerL1Allocations::runOnOperation() {
         l1Memory, byteShift,
         /*sizes=*/ValueRange());
     allocOp->replaceAllUsesWith(viewOp);
+    allocOp->erase();
 
     uint64_t memRefSize = llvm::divideCeil(bitWidth, 8);
     for (uint64_t size : memRefType.getShape())
