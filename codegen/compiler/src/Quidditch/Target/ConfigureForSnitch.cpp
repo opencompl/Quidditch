@@ -39,7 +39,7 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
           // How many rows we are processing (0 to 400). Should fit in L1.
           // Should be as high as possible for subgroup distribution.
           // (Could almost be 40).
-          bounds[1] = 80;
+          bounds[1] = 50;
 
           // Reduction dimension (0 to 161). How many columns are we processing
           // at once?
@@ -80,7 +80,7 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
           bounds[0] = 1;
           // How many rows we are processing (0 to 600). Should fit in L1.
           // Should be as high as possible for subgroup distribution.
-          bounds[1] = 20;
+          bounds[1] = 15;
 
           // Reduction dimension (0 to 600). How many columns are we processing
           // at once?
@@ -100,7 +100,7 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
           bounds[0] = 0;
           // How many rows we are processing (0 to 1200). Should fit in L1.
           // Should be as high as possible for subgroup distribution.
-          bounds[1] = 30;
+          bounds[1] = 25;
           // Reduction dimension (0 to 400). How many columns we are processing
           // at once?
           // Cannot be distributed. As wide as possible for FPU utilization of a

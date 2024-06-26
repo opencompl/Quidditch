@@ -73,7 +73,8 @@ struct QuidditchTargetOptions {
   std::string xDSLOptPath;
   std::string toolChainRoot;
   bool assertCompiled = false;
-  unsigned l1MemoryBytes = 112640;
+  // TODO: This should actually be 112640 but DMA stack overflows. Ooopsie!
+  unsigned l1MemoryBytes = 100000;
 
   void bindOptions(OptionsBinder &binder) {
     LLVMInitializeRISCVTarget();

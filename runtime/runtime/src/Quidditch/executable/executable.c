@@ -166,7 +166,7 @@ iree_status_t quidditch_executable_issue_dispatch_inline(
   });
 #endif  // IREE_HAL_VERBOSE_TRACING_ENABLE
 
-  iree_hal_executable_workgroup_state_v0_t workgroup_state;
+  iree_hal_executable_workgroup_state_v0_t workgroup_state = {0};
 
   workgroup_state.local_memory = local_memory.data;
   workgroup_state.local_memory_size = (size_t)local_memory.data_length;
