@@ -25,10 +25,10 @@ source ./venv/bin/activate
 
 mkdir build && cd build
 cmake .. -GNinja \
-  # Optional but highly recommended 
+  # Optional but highly recommended \
   -DCMAKE_C_COMPILER=clang \
   -DCMAKE_CXX_COMPILER=clang++ \
-  # Optional for improved caching, requires ccache to be installed.
+  # Optional for improved caching, requires ccache to be installed. \
   # -DCMAKE_C_COMPILER_LAUNCHER=ccache \
   # -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
   -DQUIDDITCH_TOOLCHAIN_FILE=../toolchain/ToolchainFile.cmake
