@@ -25,4 +25,20 @@ def LowerL1AllocationsPass : InterfacePass<"quidditch-lower-l1-allocations",
   ];
 }
 
+def SpecializeDMACodePass : Pass<"quidditch-specialize-dma-code",
+  "mlir::ModuleOp"> {
+
+  let description = [{
+    Pass performing code specialization for DMA and compute cores while
+    inserting required synchronization primitives.
+
+    Every function originally present in the IR will be cloned and turned into
+    a "dma" version.
+    DMA versions have all compute operations (i.e. `mmemref.microkernel`s)
+    removed while the original version has all DMA transfer operations removed.
+    Barriers are inserted where data dependencies require either transfers or
+    computations to have finished.
+  }];
+}
+
 #endif

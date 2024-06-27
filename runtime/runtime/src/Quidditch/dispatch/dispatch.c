@@ -97,12 +97,18 @@ void quidditch_dispatch_queue_workgroup(
 }
 
 void quidditch_dispatch_execute_workgroups() {
-  // Avoid needlessly waking any cores if no workgroups are queued.
-  if (nextCoreToUse == 0) return;
-
   // First wake workers.
-  snrt_cluster_hw_barrier();
+  quidditch_dispatch_start_executing_workgroup();
+
   // Then wait for workers to be done.
+  quidditch_dispatch_wait_for_workgroup();
+}
+
+void quidditch_dispatch_start_executing_workgroup() {
+  snrt_cluster_hw_barrier();
+}
+
+void quidditch_dispatch_wait_for_workgroup() {
   snrt_cluster_hw_barrier();
   reset_workgroup_state();
 }
