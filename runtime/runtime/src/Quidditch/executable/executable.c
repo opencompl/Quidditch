@@ -73,6 +73,13 @@ quidditch_executable_get_exports(quidditch_executable_t* executable) {
       .quidditch_v0->exports;
 }
 
+static const iree_hal_executable_import_table_v0_t*
+quidditch_executable_get_imports(quidditch_executable_t* executable) {
+  if (executable->is_llvm_cpu_executable)
+    return &executable->library.llvmcpu_v0->imports;
+  return &executable->library.quidditch_v0->imports;
+}
+
 static const iree_hal_executable_dispatch_attrs_v0_t*
 quidditch_executable_get_attrs(quidditch_executable_t* executable) {
   return quidditch_executable_get_exports(executable)->attrs;
@@ -124,13 +131,11 @@ iree_status_t quidditch_executable_create(
     executable->environment.constants = target_constants;
   }
 
-  // TODO: Might need to do the below for Quidditch executables as well.
-
   // Resolve imports, if any.
-  if (iree_status_is_ok(status) && executable->is_llvm_cpu_executable) {
+  if (iree_status_is_ok(status)) {
     status = iree_hal_executable_library_initialize_imports(
         &executable->environment, import_provider,
-        &executable->library.llvmcpu_v0->imports,
+        quidditch_executable_get_imports(executable),
         quidditch_executable_import_thunk_v0, host_allocator);
   }
 
