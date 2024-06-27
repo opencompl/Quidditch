@@ -39,6 +39,7 @@ iree_cc_library(
         Quidditch
         SRCS
         "QuidditchTarget.cpp"
+        "LibraryBuilder.cpp"
         DEPS
         ::Passes
         Quidditch::Conversion::ConvertToRISCV
