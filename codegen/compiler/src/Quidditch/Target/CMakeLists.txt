@@ -22,7 +22,7 @@ iree_cc_library(
         "Passes.h.inc"
         SRCS
         "DisableQuidditchVariant.cpp"
-        "OutlineLinalgOpsToxDSL.cpp"
+        "FormMicrokernels.cpp"
         "LinkExecutables.cpp"
         "ReluToMax.cpp"
         DEPS

@@ -3,17 +3,11 @@
 
 include "mlir/Pass/PassBase.td"
 
-def OutlineLinalgOpsToxDSLPass
-  : Pass<"quidditch-outline-linalg-ops-to-xdsl", "mlir::ModuleOp"> {
-  let description = [{
-    Outlines a series of linalg operation in a function into their own
-    functions with a suitable calling convention for xDSL.
-    The generated functions can be identified via `xdsl_generated` attribute.
-
-    The original function that the outlining was performed on will have a
-    `xdsl_kernels` which is an array of symbol references to the outlined
-    functions.
-  }];
+def FormMicrokernelsPass
+  : InterfacePass<"quidditch-form-microkernels", "mlir::FunctionOpInterface"> {
+  let dependentDialects = [
+    "quidditch::Snitch::QuidditchSnitchDialect",
+  ];
 }
 
 def LinkExecutablesPass : Pass<"quidditch-link-executables", "mlir::ModuleOp"> {

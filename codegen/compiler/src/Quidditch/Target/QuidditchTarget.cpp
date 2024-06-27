@@ -158,9 +158,8 @@ public:
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
         .addPass(createFuseTensorPadWithConsumerPass)
-        .addPass(createConcretizePadResultShapePass);
-
-    modulePassManager.addPass(quidditch::createOutlineLinalgOpsToxDSLPass());
+        .addPass(createConcretizePadResultShapePass)
+        .addPass(quidditch::createFormMicrokernelsPass);
 
     BufferizationOptions::AllocationFn allocationFn =
         [](OpBuilder &builder, Location loc, MemRefType memRefType,
