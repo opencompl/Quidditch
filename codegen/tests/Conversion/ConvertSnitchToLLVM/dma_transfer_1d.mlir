@@ -13,3 +13,20 @@ func.func @test(%arg0 : memref<?xf32>, %arg1 : memref<?xf32>) -> !quidditch_snit
   // CHECK: return %[[C]]
   return %0 : !quidditch_snitch.dma_token
 }
+
+// CHECK-LABEL: @test2
+func.func @test2(%arg0 : memref<?xf32>, %arg1 : memref<?xf32, strided<[1], offset: ?>>) -> !quidditch_snitch.dma_token {
+  // CHECK: llvm.call @snrt_dma_start_1d(
+  %0 = quidditch_snitch.start_dma_transfer from %arg0 : memref<?xf32> to %arg1 : memref<?xf32, strided<[1], offset: ?>>
+  // CHECK: llvm.call @snrt_dma_start_1d(
+  %1 = quidditch_snitch.start_dma_transfer from %arg1 : memref<?xf32, strided<[1], offset: ?>> to %arg0 : memref<?xf32>
+  return %0 : !quidditch_snitch.dma_token
+}
+
+// CHECK-LABEL: @test3
+func.func @test3(%arg0 : memref<?x4xf32>, %arg1 : memref<?x4xf32, strided<[4, 1], offset: ?>>) -> !quidditch_snitch.dma_token {
+  // CHECK: llvm.call @snrt_dma_start_1d(
+  %0 = quidditch_snitch.start_dma_transfer from %arg0 : memref<?x4xf32> to %arg1 : memref<?x4xf32, strided<[4, 1], offset: ?>>
+  return %0 : !quidditch_snitch.dma_token
+}
+
