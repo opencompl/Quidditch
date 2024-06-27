@@ -4,8 +4,10 @@ iree_cc_library(
     executable
     HDRS
     "executable.h"
+    "executable_library.h"
     SRCS
     "executable.c"
+    "executable_library.c"
     DEPS
     snRuntimeInterface
     Quidditch::dispatch::dispatch

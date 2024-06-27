@@ -65,6 +65,19 @@ static int quidditch_executable_import_thunk_v0(
   return fn_ptr(params, context, reserved);
 }
 
+static const iree_hal_executable_export_table_v0_t*
+quidditch_executable_get_exports(quidditch_executable_t* executable) {
+  if (executable->is_llvm_cpu_executable)
+    return &executable->library.llvmcpu_v0->exports;
+  return (const iree_hal_executable_export_table_v0_t*)&executable->library
+      .quidditch_v0->exports;
+}
+
+static const iree_hal_executable_dispatch_attrs_v0_t*
+quidditch_executable_get_attrs(quidditch_executable_t* executable) {
+  return quidditch_executable_get_exports(executable)->attrs;
+}
+
 iree_status_t quidditch_executable_create(
     const iree_hal_executable_params_t* executable_params,
     const iree_hal_executable_library_header_t** library_header,
@@ -93,11 +106,11 @@ iree_status_t quidditch_executable_create(
                                     &executable->layouts[0], host_allocator,
                                     executable);
     executable->library.header = library_header;
+    executable->is_llvm_cpu_executable = !iree_string_view_equal(
+        executable_params->executable_format, IREE_SV("snitch"));
     executable->identifier = iree_make_cstring_view((*library_header)->name);
-    executable->dispatch_attrs = executable->library.v0->exports.attrs;
+    executable->dispatch_attrs = quidditch_executable_get_attrs(executable);
   }
-  executable->is_llvm = !iree_string_view_equal(
-      executable_params->executable_format, IREE_SV("snitch"));
 
   // Copy executable constants so we own them.
   if (iree_status_is_ok(status) && executable_params->constant_count > 0) {
@@ -111,23 +124,26 @@ iree_status_t quidditch_executable_create(
     executable->environment.constants = target_constants;
   }
 
+  // TODO: Might need to do the below for Quidditch executables as well.
+
   // Resolve imports, if any.
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && executable->is_llvm_cpu_executable) {
     status = iree_hal_executable_library_initialize_imports(
         &executable->environment, import_provider,
-        &executable->library.v0->imports, quidditch_executable_import_thunk_v0,
-        host_allocator);
+        &executable->library.llvmcpu_v0->imports,
+        quidditch_executable_import_thunk_v0, host_allocator);
   }
 
   // Verify that the library matches the executable params.
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && executable->is_llvm_cpu_executable) {
     status = iree_hal_executable_library_verify(executable_params,
-                                                executable->library.v0);
+                                                executable->library.llvmcpu_v0);
   }
 
   // Publish the executable sources with the tracing infrastructure.
-  if (iree_status_is_ok(status)) {
-    iree_hal_executable_library_publish_source_files(executable->library.v0);
+  if (iree_status_is_ok(status) && executable->is_llvm_cpu_executable) {
+    iree_hal_executable_library_publish_source_files(
+        executable->library.llvmcpu_v0);
   }
 
   if (iree_status_is_ok(status)) {
@@ -171,19 +187,26 @@ iree_status_t quidditch_executable_issue_dispatch_inline(
   workgroup_state.local_memory = local_memory.data;
   workgroup_state.local_memory_size = (size_t)local_memory.data_length;
 
-  const iree_hal_executable_library_v0_t* library = executable->library.v0;
+  const iree_hal_executable_export_table_v0_t* exports =
+      quidditch_executable_get_exports(executable);
 
-  if (IREE_UNLIKELY(ordinal >= library->exports.count)) {
+  if (IREE_UNLIKELY(ordinal >= exports->count)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "entry point ordinal out of bounds");
   }
-  iree_hal_executable_dispatch_v0_t kernel = library->exports.ptrs[ordinal];
+  iree_hal_executable_dispatch_v0_t kernel = exports->ptrs[ordinal];
 
   quidditch_dispatch_set_kernel(kernel, &executable->environment,
                                 dispatch_state);
 
+  bool compute_cores_are_workgroups = false;
+  if (executable->is_llvm_cpu_executable ||
+      !((quidditch_executable_export_table_v0_t*)exports)
+           ->dma_core_ptrs[ordinal])
+    compute_cores_are_workgroups = true;
+
   read_csr(mcycle);
-  if (executable->is_llvm) {
+  if (compute_cores_are_workgroups) {
     // LLVM distributes workgroups to compute cores.
     for (uint32_t z = 0; z < workgroup_count_z; ++z) {
       workgroup_state.workgroup_id_z = z;

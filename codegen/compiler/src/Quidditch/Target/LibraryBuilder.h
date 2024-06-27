@@ -19,7 +19,7 @@ namespace Quidditch {
 // Defines an `iree_hal_executable_library_v0_t` and builds the runtime metadata
 // structures and query functions.
 //
-// See iree/hal/local/executable_library.h for more information.
+// See Quidditch/executable/executable_library.h for more information.
 //
 // Usage:
 //  LibraryBuilder builder(&module);
@@ -121,9 +121,10 @@ public:
   void addExport(llvm::StringRef name, SourceLocation sourceLocation,
                  llvm::SmallVector<SourceLocation> stageLocations,
                  llvm::StringRef tag, DispatchAttrs attrs,
-                 llvm::Function *func) {
+                 llvm::Function *compute_func, llvm::Function *dmaFunc) {
     exports.push_back({name.str(), std::move(sourceLocation),
-                       std::move(stageLocations), tag.str(), attrs, func});
+                       std::move(stageLocations), tag.str(), attrs,
+                       compute_func, dmaFunc});
   }
 
   // Defines a source file embedded in the library.
@@ -167,7 +168,8 @@ private:
     llvm::SmallVector<SourceLocation> stageLocations;
     std::string tag;
     DispatchAttrs attrs;
-    llvm::Function *func;
+    llvm::Function *compute_func;
+    llvm::Function *dma_func;
   };
   std::vector<Dispatch> exports;
 

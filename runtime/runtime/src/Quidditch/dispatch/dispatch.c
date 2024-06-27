@@ -56,10 +56,11 @@ int quidditch_dispatch_enter_worker_loop() {
     snrt_cluster_hw_barrier();
     if (exit) break;
 
+    // Cores not in use may spuriously wake up at any time and need to reenter
+    // the barrier asap.
     iree_hal_executable_workgroup_state_v0_t* workgroupState =
         &configuredWorkgroupState[snrt_cluster_core_idx()];
     if (workgroupState->processor_id == -1) {
-      snrt_cluster_hw_barrier();
       continue;
     }
 
