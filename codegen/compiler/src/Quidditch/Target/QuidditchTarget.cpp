@@ -73,7 +73,8 @@ struct QuidditchTargetOptions {
   std::string xDSLOptPath;
   std::string toolChainRoot;
   bool assertCompiled = false;
-  unsigned l1MemoryBytes = 112640;
+  // TODO: This should actually be 112640 but DMA stack overflows. Ooopsie!
+  unsigned l1MemoryBytes = 100000;
 
   void bindOptions(OptionsBinder &binder) {
     LLVMInitializeRISCVTarget();
@@ -147,6 +148,21 @@ public:
         StringAttr::get(context, "static"), list.getDictionary(context)));
   }
 
+  void
+  buildConfigurationPassPipeline(IREE::HAL::ExecutableTargetAttr targetAttr,
+                                 OpPassManager &passManager) override {
+    OpPassManager &modulePassManager = passManager.nest<ModuleOp>();
+    {
+      FunctionLikeNest funcPassManager(modulePassManager);
+      addCommonTargetExecutablePreprocessingPasses(
+          funcPassManager,
+          /*useDecomposeSoftmaxFusion=*/false);
+    }
+    modulePassManager.addPass(createMaterializeUserConfigsPass());
+    FunctionLikeNest funcPassManager(modulePassManager);
+    funcPassManager.addPass(quidditch::createConfigureForSnitchPass);
+  }
+
   void buildTranslationPassPipeline(IREE::HAL::ExecutableTargetAttr targetAttr,
                                     OpPassManager &passManager) override {
     OpPassManager &modulePassManager = passManager.nest<ModuleOp>();
@@ -178,6 +194,8 @@ public:
         .addPass(createEliminateEmptyTensorsPass)
         .addPass(bufferization::createEmptyTensorToAllocTensorPass)
         .addPass(quidditch::Snitch::createPromoteToL1Pass)
+        .addPass(createCanonicalizerPass)
+        .addPass(createCSEPass)
         .addPass([&] {
           return createIREEComprehensiveBufferizePass(allocationFn, memcpyFn);
         });
@@ -289,7 +307,7 @@ public:
     return objectFiles;
   }
 
-  std::unique_ptr<llvm::Module>
+  static std::unique_ptr<llvm::Module>
   toLLVMModule(llvm::LLVMContext &context, ModuleOp module,
                const llvm::TargetMachine &machine,
                IREE::HAL::ExecutableVariantOp variantOp) {
@@ -367,7 +385,8 @@ public:
     return llvmModule;
   }
 
-  void optimizeLLVMModule(llvm::Module &module, llvm::TargetMachine &machine) {
+  static void optimizeLLVMModule(llvm::Module &module,
+                                 llvm::TargetMachine &machine) {
 
     llvm::LoopAnalysisManager loopAnalysisManager;
     llvm::FunctionAnalysisManager functionAnalysisManager;
@@ -392,7 +411,7 @@ public:
     modulePassManager.run(module, moduleAnalysisManager);
   }
 
-  FailureOr<IREE::HAL::Artifact>
+  static FailureOr<IREE::HAL::Artifact>
   compileLLVMModule(llvm::Module &module, llvm::TargetMachine &machine) {
     auto objectFile = IREE::HAL::Artifact::createTemporary("iree-out", "o");
 
@@ -481,7 +500,7 @@ public:
     std::vector<uint8_t> libraryNameVector(libraryName.begin(),
                                            libraryName.end());
     executableBuilder.create<IREE::HAL::ExecutableBinaryOp>(
-        variantOp.getLoc(), variantOp.getSymName(), "static",
+        variantOp.getLoc(), variantOp.getSymName(), "snitch",
         libraryNameVector);
 
     return success();

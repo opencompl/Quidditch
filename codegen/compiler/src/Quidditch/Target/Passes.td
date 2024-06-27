@@ -31,4 +31,8 @@ def DisableQuidditchVariantPass : Pass<"quidditch-disable-variant",
 
 def ReluToMaxPass : Pass<"quidditch-relu-to-max">;
 
+def ConfigureForSnitchPass
+  : InterfacePass<"quidditch-configure-for-snitch",
+      "mlir::FunctionOpInterface">;
+
 #endif
