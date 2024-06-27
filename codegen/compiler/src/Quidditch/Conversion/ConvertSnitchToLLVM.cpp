@@ -61,6 +61,29 @@ struct L1MemoryViewOpLowering : ConvertOpToLLVMPattern<L1MemoryViewOp> {
     return success();
   }
 };
+
+struct StartDMATransferOpLowering : ConvertOpToLLVMPattern<StartDMATransferOp> {
+  using ConvertOpToLLVMPattern<StartDMATransferOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(StartDMATransferOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    return success();
+  }
+};
+
+struct WaitForDMATransfersOpLowering
+    : ConvertOpToLLVMPattern<WaitForDMATransfersOp> {
+  using ConvertOpToLLVMPattern<WaitForDMATransfersOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(WaitForDMATransfersOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+
+    return success();
+  }
+};
 } // namespace
 
 void ConvertSnitchToLLVM::runOnOperation() {

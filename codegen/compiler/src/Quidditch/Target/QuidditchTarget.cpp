@@ -24,6 +24,7 @@
 
 #include "Quidditch/Conversion/Passes.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h"
 #include "Quidditch/Dialect/Snitch/Transforms/Passes.h"
 
 #include "compiler/plugins/target/LLVMCPU/LinkerTool.h"
@@ -183,12 +184,14 @@ public:
       return builder.create<memref::AllocaOp>(
           loc, memRefType, dynamicSizes, builder.getI64IntegerAttr(alignment));
     };
-    BufferizationOptions::MemCpyFn memcpyFn =
-        [](OpBuilder &builder, Location loc, Value from, Value to) {
-          // TODO: DMA copy.
-          createLinalgCopyOp(builder, loc, from, to);
-          return success();
-        };
+    BufferizationOptions::MemCpyFn memcpyFn = [](OpBuilder &builder,
+                                                 Location loc, Value from,
+                                                 Value to) {
+      Value token =
+          builder.create<quidditch::Snitch::StartDMATransferOp>(loc, from, to);
+      builder.create<quidditch::Snitch::WaitForDMATransfersOp>(loc, token);
+      return success();
+    };
 
     FunctionLikeNest(modulePassManager)
         .addPass(createEliminateEmptyTensorsPass)

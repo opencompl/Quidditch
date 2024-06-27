@@ -2,6 +2,7 @@
 #define QUIDDITCH_DIALECT_SNITCH_QUIDDITCHSNITCHOPS
 
 include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.td"
+include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchTypes.td"
 include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
@@ -118,6 +119,37 @@ def QuidditchSnitch_L1MemoryViewOp : QuidditchSnitch_Op<"l1_memory_view",
 
   let assemblyFormat = [{
     `->` type($result) attr-dict
+  }];
+}
+
+def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer",
+  [MemoryEffects<[MemWrite]>]> {
+
+  // TODO: This is more restrictive than the hardware instruction.
+  //       The hardware instruction only allows strides on the outermost
+  //       dimension but is otherwise orthogonal to the actual rank.
+  // TODO: At least one of them must be in L1 I think.
+  let arguments = (ins
+    Arg<MemRefRankOf<[AnyType], [1, 2]>, "", [MemRead]>:$source,
+    Arg<MemRefRankOf<[AnyType], [1, 2]>, "", [MemWrite]>:$dest
+  );
+
+  let results = (outs QuidditchSnitch_DMATokenType:$token);
+
+  let assemblyFormat = [{
+    `from` $source `:` type($source) `to` $dest `:` type($dest) attr-dict
+  }];
+}
+
+def QuidditchSnitch_WaitForDMATransfersOp : QuidditchSnitch_Op<"wait_for_dma_transfers",
+  [MemoryEffects<[MemRead]>]> {
+
+  let arguments = (ins
+    Variadic<QuidditchSnitch_DMATokenType>:$tokens
+  );
+
+  let assemblyFormat = [{
+    $tokens `:` type($tokens) attr-dict
   }];
 }
 

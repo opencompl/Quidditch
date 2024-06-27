@@ -9,5 +9,7 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+#include "QuidditchSnitchTypes.h"
+
 #define GET_OP_CLASSES
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h.inc"
