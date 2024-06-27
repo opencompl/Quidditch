@@ -26,7 +26,6 @@
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "Quidditch/Dialect/Snitch/Transforms/Passes.h"
 
-#include "compiler/plugins/target/LLVMCPU/LibraryBuilder.h"
 #include "compiler/plugins/target/LLVMCPU/LinkerTool.h"
 #include "compiler/plugins/target/LLVMCPU/StaticLibraryGenerator.h"
 
@@ -40,6 +39,7 @@
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/Program.h"
 
+#include "LibraryBuilder.h"
 #include "Passes.h"
 
 using namespace mlir;
@@ -328,9 +328,9 @@ public:
       return nullptr;
     }
 
-    IREE::HAL::LibraryBuilder libraryBuilder(
-        llvmModule.get(), IREE::HAL::LibraryBuilder::Mode::NONE,
-        IREE::HAL::LibraryBuilder::Version::LATEST);
+    Quidditch::LibraryBuilder libraryBuilder(
+        llvmModule.get(), Quidditch::LibraryBuilder::Mode::NONE,
+        Quidditch::LibraryBuilder::Version::LATEST);
     auto align16 = llvm::Attribute::getWithAlignment(context, llvm::Align(16));
     for (auto exportOp :
          variantOp.getBlock().getOps<IREE::HAL::ExecutableExportOp>()) {
@@ -360,12 +360,12 @@ public:
                                     .value_or(APInt(64, 0))
                                     .getSExtValue();
 
-      IREE::HAL::LibraryBuilder::SourceLocation sourceLocation;
-      SmallVector<IREE::HAL::LibraryBuilder::SourceLocation> stageLocations;
+      Quidditch::LibraryBuilder::SourceLocation sourceLocation;
+      SmallVector<Quidditch::LibraryBuilder::SourceLocation> stageLocations;
       libraryBuilder.addExport(
           exportOp.getName(), std::move(sourceLocation),
           std::move(stageLocations), /*tag=*/"",
-          IREE::HAL::LibraryBuilder::DispatchAttrs{localMemorySize}, llvmFunc);
+          Quidditch::LibraryBuilder::DispatchAttrs{localMemorySize}, llvmFunc);
     }
     auto *queryLibraryFunc =
         libraryBuilder.build("quidditch_" + libraryName + "_library_query");
