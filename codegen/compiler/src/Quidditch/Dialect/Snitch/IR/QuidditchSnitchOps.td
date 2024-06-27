@@ -153,4 +153,10 @@ def QuidditchSnitch_WaitForDMATransfersOp : QuidditchSnitch_Op<"wait_for_dma_tra
   }];
 }
 
+def QuidditchSnitch_BarrierOp : QuidditchSnitch_Op<"barrier"> {
+  let assemblyFormat = [{
+    attr-dict
+  }];
+}
+
 #endif
