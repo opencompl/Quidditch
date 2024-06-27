@@ -2,6 +2,7 @@
 
 #include "QuidditchSnitchAttrs.h"
 #include "QuidditchSnitchOps.h"
+#include "QuidditchSnitchTypes.h"
 
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.cpp.inc"
 
@@ -15,5 +16,9 @@ void QuidditchSnitchDialect::initialize() {
   addAttributes<
 #define GET_ATTRDEF_LIST
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchAttrs.cpp.inc"
+      >();
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchTypes.cpp.inc"
       >();
 }
