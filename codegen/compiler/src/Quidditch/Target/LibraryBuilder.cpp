@@ -182,18 +182,19 @@ makeStageLocationTableType(llvm::LLVMContext &context) {
   return type;
 }
 
-// %struct.iree_hal_executable_export_table_v0_t = type {
+// %struct.quidditch_executable_export_table_v0_t = type {
 //   i32,
-//   i32*,
+//   %struct.iree_hal_executable_dispatch_v0_t**,
 //   %struct.iree_hal_executable_dispatch_attrs_v0_t*,
 //   i8**,
 //   i8**,
 //   %struct.iree_hal_executable_source_location_v0_t*,
 //   %struct.iree_hal_executable_stage_location_table_v0_t*,
+//   %struct.iree_hal_executable_dispatch_v0_t*,
 // }
 static llvm::StructType *makeExportTableType(llvm::LLVMContext &context) {
   if (auto *existingType = llvm::StructType::getTypeByName(
-          context, "iree_hal_executable_export_table_v0_t")) {
+          context, "quidditch_executable_export_table_v0_t")) {
     return existingType;
   }
   auto *i32Type = llvm::IntegerType::getInt32Ty(context);
@@ -212,8 +213,9 @@ static llvm::StructType *makeExportTableType(llvm::LLVMContext &context) {
           i8PtrType->getPointerTo(),
           sourceLocationType->getPointerTo(),
           stageLocationTableType->getPointerTo(),
+          dispatchFunctionType->getPointerTo()->getPointerTo(),
       },
-      "iree_hal_executable_export_table_v0_t",
+      "quidditch_executable_export_table_v0_t",
       /*isPacked=*/false);
   return type;
 }
@@ -493,7 +495,7 @@ LibraryBuilder::buildLibraryV0ExportTable(std::string libraryName) {
   // iree_hal_executable_export_table_v0_t::ptrs
   SmallVector<llvm::Constant *> exportPtrValues;
   for (auto dispatch : exports)
-    exportPtrValues.push_back(dispatch.func);
+    exportPtrValues.push_back(dispatch.compute_func);
   llvm::Constant *exportPtrs = createArrayConstant(
       libraryName + "_funcs", dispatchFunctionType->getPointerTo(),
       exportPtrValues, module);
@@ -618,6 +620,20 @@ LibraryBuilder::buildLibraryV0ExportTable(std::string libraryName) {
     }
   }
 
+  // quidditch_executable_export_table_v0_t::dma_core_ptrs
+  SmallVector<llvm::Constant *> dmaCorePtrs;
+  for (Dispatch &dispatch : exports) {
+    if (!dispatch.dma_func) {
+      dmaCorePtrs.push_back(
+          llvm::Constant::getNullValue(dispatchAttrsType->getPointerTo()));
+      continue;
+    }
+    dmaCorePtrs.push_back(dispatch.dma_func);
+  }
+  llvm::Constant *dmaCorePtrsArray = createArrayConstant(
+      libraryName + "_dma_core_ptrs", dispatchAttrsType->getPointerTo(),
+      dmaCorePtrs, module);
+
   return llvm::ConstantStruct::get(
       exportTableType, {
                            // count=
@@ -634,6 +650,7 @@ LibraryBuilder::buildLibraryV0ExportTable(std::string libraryName) {
                            exportSourceLocations,
                            // stage_locations=
                            exportStageLocations,
+                           dmaCorePtrsArray,
                        });
 }
 

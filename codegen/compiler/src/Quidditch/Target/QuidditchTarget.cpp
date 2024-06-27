@@ -334,11 +334,21 @@ public:
     auto align16 = llvm::Attribute::getWithAlignment(context, llvm::Align(16));
     for (auto exportOp :
          variantOp.getBlock().getOps<IREE::HAL::ExecutableExportOp>()) {
+      llvm::Function *dmaPointer = nullptr;
       // Find the matching function in the LLVM module.
       auto *llvmFunc =
           llvmModule->getFunction((exportOp.getName() + "$iree_to_xdsl").str());
-      if (!llvmFunc)
+      if (!llvmFunc) {
+        // LLVMCPU kernel rather than xDSL.
         llvmFunc = llvmModule->getFunction(exportOp.getName());
+      } else {
+        // xDSL kernel.
+
+        // TODO: Replace with real DMA pointer. For now just a place holder that
+        //  is not used in the runtime but makes the dispatch recognizeable as
+        //  an xDSL dispatch.
+        dmaPointer = llvmFunc;
+      }
       if (!llvmFunc)
         continue;
 
@@ -365,7 +375,8 @@ public:
       libraryBuilder.addExport(
           exportOp.getName(), std::move(sourceLocation),
           std::move(stageLocations), /*tag=*/"",
-          Quidditch::LibraryBuilder::DispatchAttrs{localMemorySize}, llvmFunc);
+          Quidditch::LibraryBuilder::DispatchAttrs{localMemorySize}, llvmFunc,
+          dmaPointer);
     }
     auto *queryLibraryFunc =
         libraryBuilder.build("quidditch_" + libraryName + "_library_query");

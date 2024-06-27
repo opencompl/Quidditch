@@ -8,6 +8,7 @@
 
 #include <iree/hal/local/executable_loader.h>
 
+#include "executable_library.h"
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
 #include "iree/hal/local/executable_library.h"
@@ -44,10 +45,11 @@ typedef struct quidditch_executable_t {
 
   union {
     const iree_hal_executable_library_header_t** header;
-    const iree_hal_executable_library_v0_t* v0;
+    const iree_hal_executable_library_v0_t* llvmcpu_v0;
+    const quidditch_executable_library_v0_t* quidditch_v0;
   } library;
 
-  bool is_llvm;
+  bool is_llvm_cpu_executable;
 
   iree_hal_pipeline_layout_t* layouts[];
 } quidditch_executable_t;
