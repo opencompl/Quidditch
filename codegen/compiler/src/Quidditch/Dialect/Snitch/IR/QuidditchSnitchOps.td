@@ -2,6 +2,7 @@
 #define QUIDDITCH_DIALECT_SNITCH_QUIDDITCHSNITCHOPS
 
 include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.td"
+include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchTypes.td"
 include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
@@ -118,6 +119,51 @@ def QuidditchSnitch_L1MemoryViewOp : QuidditchSnitch_Op<"l1_memory_view",
 
   let assemblyFormat = [{
     `->` type($result) attr-dict
+  }];
+}
+
+def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer",
+  [MemoryEffects<[MemWrite]>, SameOperandsElementType, SameOperandsShape]> {
+
+  let description = [{
+    Operation performing a DMA transfer from one MemRef to another.
+    At least one of the two MemRefs must be in L1 memory.
+    The shapes (including dynamic ones at runtime) of both MemRefs must be
+    identical with different strides and offsets allowed.
+
+    The DMA operation is likely (but not guaranteed) to run asynchronous and
+    its completion only guaranteed by executing the `wait_for_dma_transfers`
+    operation with the token returned by this operation or a later one.
+  }];
+
+  // TODO: In reality what the constraint here is, is that both of them must either be contiguous or if a dimension is
+  //       not contiguous in one of them, all dimensions prior to that must be contiguous (i.e. of equal size).
+  //       Can support higher dimensions and funkier strides once needed.
+  let arguments = (ins
+    Arg<MemRefRankOf<[AnyType], [1, 2]>, "source", [MemRead]>:$source,
+    Arg<MemRefRankOf<[AnyType], [1, 2]>, "destination", [MemWrite]>:$dest
+  );
+
+  let results = (outs QuidditchSnitch_DMATokenType:$token);
+
+  let assemblyFormat = [{
+    `from` $source `:` type($source) `to` $dest `:` type($dest) attr-dict
+  }];
+}
+
+def QuidditchSnitch_WaitForDMATransfersOp
+  : QuidditchSnitch_Op<"wait_for_dma_transfers"> {
+
+  let description = [{
+    Operation awaiting for DMA transfers denoted by its tokens to be finished.
+  }];
+
+  let arguments = (ins
+    Variadic<QuidditchSnitch_DMATokenType>:$tokens
+  );
+
+  let assemblyFormat = [{
+    $tokens `:` type($tokens) attr-dict
   }];
 }
 

@@ -62,6 +62,125 @@ struct L1MemoryViewOpLowering : ConvertOpToLLVMPattern<L1MemoryViewOp> {
   }
 };
 
+struct StartDMATransferOp1DLowering
+    : ConvertOpToLLVMPattern<StartDMATransferOp> {
+
+  LLVM::LLVMFuncOp dmaStart1DFunc;
+
+  StartDMATransferOp1DLowering(LLVM::LLVMFuncOp dmaStart1DFunc,
+                               const LLVMTypeConverter &converter)
+      : ConvertOpToLLVMPattern(converter, /*benefit=*/2),
+        dmaStart1DFunc(dmaStart1DFunc) {
+    setHasBoundedRewriteRecursion();
+  }
+
+  LogicalResult match(StartDMATransferOp op) const override {
+    MemRefLayoutAttrInterface sourceLayout =
+        op.getSource().getType().getLayout();
+    MemRefLayoutAttrInterface destLayout = op.getDest().getType().getLayout();
+    if (sourceLayout && !sourceLayout.isIdentity())
+      return failure();
+
+    if (destLayout && !destLayout.isIdentity())
+      return failure();
+
+    return success();
+  }
+
+  void rewrite(StartDMATransferOp op, OpAdaptor adaptor,
+               ConversionPatternRewriter &rewriter) const override {
+    MemRefDescriptor sourceDescriptor(adaptor.getSource());
+    MemRefDescriptor destDescriptor(adaptor.getDest());
+
+    Value source = sourceDescriptor.bufferPtr(
+        rewriter, op->getLoc(), *getTypeConverter(), op.getSource().getType());
+    Value dest = destDescriptor.bufferPtr(
+        rewriter, op->getLoc(), *getTypeConverter(), op.getSource().getType());
+
+    MemRefType sourceMemRef = op.getSource().getType();
+    SmallVector<Value> dynamicSizes;
+    for (std::int64_t dim : sourceMemRef.getShape())
+      if (ShapedType::isDynamic(dim))
+        dynamicSizes.push_back(
+            sourceDescriptor.size(rewriter, op->getLoc(), dim));
+
+    SmallVector<Value> sizes;
+    SmallVector<Value> strides;
+    Value totalSize;
+    getMemRefDescriptorSizes(op->getLoc(), op.getSource().getType(),
+                             dynamicSizes, rewriter, sizes, strides, totalSize);
+
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, dmaStart1DFunc,
+                                              ValueRange{
+                                                  dest,
+                                                  source,
+                                                  totalSize,
+                                              });
+  }
+};
+
+struct StartDMATransferOp2DLowering
+    : ConvertOpToLLVMPattern<StartDMATransferOp> {
+
+  LLVM::LLVMFuncOp dmaStart2DFunc;
+
+  StartDMATransferOp2DLowering(LLVM::LLVMFuncOp dmaStart2DFunc,
+                               const LLVMTypeConverter &converter)
+      : ConvertOpToLLVMPattern(converter), dmaStart2DFunc(dmaStart2DFunc) {}
+
+  LogicalResult
+  matchAndRewrite(StartDMATransferOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op.getSource().getType().getRank() != 2)
+      return failure();
+
+    MemRefDescriptor sourceDescriptor(adaptor.getSource());
+    MemRefDescriptor destDescriptor(adaptor.getDest());
+
+    Value source = sourceDescriptor.bufferPtr(
+        rewriter, op->getLoc(), *getTypeConverter(), op.getSource().getType());
+    Value dest = destDescriptor.bufferPtr(
+        rewriter, op->getLoc(), *getTypeConverter(), op.getSource().getType());
+
+    Value size = rewriter.create<LLVM::ConstantOp>(
+        op->getLoc(),
+        rewriter.getI32IntegerAttr(llvm::divideCeil(
+            op.getSource().getType().getElementTypeBitWidth(), 8)));
+    size = rewriter.create<LLVM::MulOp>(
+        op->getLoc(), size, sourceDescriptor.size(rewriter, op->getLoc(), 0));
+
+    Value sourceStride = sourceDescriptor.stride(rewriter, op->getLoc(), 1);
+    Value destStride = destDescriptor.stride(rewriter, op->getLoc(), 1);
+
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(
+        op, dmaStart2DFunc,
+        ValueRange{dest, source, size, destStride, sourceStride,
+                   sourceDescriptor.size(rewriter, op->getLoc(), 1)});
+    return success();
+  }
+};
+
+struct WaitForDMATransfersOpLowering
+    : ConvertOpToLLVMPattern<WaitForDMATransfersOp> {
+
+  LLVM::LLVMFuncOp waitFunc;
+
+  WaitForDMATransfersOpLowering(LLVM::LLVMFuncOp waitFunc,
+                                const LLVMTypeConverter &converter)
+      : ConvertOpToLLVMPattern(converter), waitFunc(waitFunc) {}
+
+  LogicalResult
+  matchAndRewrite(WaitForDMATransfersOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // TODO: This should wait for only a specific transfer not all.
+    //    for (Value token : adaptor.getTokens())
+    //      rewriter.create<LLVM::CallOp>(op->getLoc(), waitFunc, token);
+    rewriter.create<LLVM::CallOp>(op->getLoc(), waitFunc, ValueRange());
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 struct BarrierOpLowering : ConvertOpToLLVMPattern<BarrierOp> {
 
   LLVM::LLVMFuncOp barrierFunc;
@@ -87,11 +206,35 @@ void ConvertSnitchToLLVM::runOnOperation() {
   // TODO: This is horribly hardcoded when it shouldn't be.
   options.overrideIndexBitwidth(32);
   LLVMTypeConverter typeConverter(&getContext(), options, &dataLayoutAnalysis);
+  typeConverter.addConversion([](DMATokenType token) {
+    return IntegerType::get(token.getContext(), 32);
+  });
 
   auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
   auto ptrType = builder.getType<LLVM::LLVMPointerType>();
   IntegerType i32 = builder.getI32Type();
   IntegerType sizeT = i32;
+  auto dmaStart1D = builder.create<LLVM::LLVMFuncOp>(
+      builder.getUnknownLoc(), "snrt_dma_start_1d",
+      LLVM::LLVMFunctionType::get(i32,
+                                  ArrayRef<Type>{ptrType, ptrType, sizeT}));
+  dmaStart1D->setAttr("hal.import.bitcode", builder.getUnitAttr());
+
+  auto dmaStart2D = builder.create<LLVM::LLVMFuncOp>(
+      builder.getUnknownLoc(), "snrt_dma_start_2d",
+      LLVM::LLVMFunctionType::get(
+          i32, ArrayRef<Type>{ptrType, ptrType, sizeT, sizeT, sizeT, sizeT}));
+  dmaStart2D->setAttr("hal.import.bitcode", builder.getUnitAttr());
+
+  // TODO: This should wait for only a specific transfer not all.
+  //       This is currently bugged in the snitch_cluster repo and potentially
+  //       the hardware.
+  auto dmaWait = builder.create<LLVM::LLVMFuncOp>(
+      builder.getUnknownLoc(), "snrt_dma_wait_all",
+      LLVM::LLVMFunctionType::get(builder.getType<LLVM::LLVMVoidType>(),
+                                  ArrayRef<Type>{}));
+  dmaWait->setAttr("hal.import.bitcode", builder.getUnitAttr());
+
   auto barrier = builder.create<LLVM::LLVMFuncOp>(
       builder.getUnknownLoc(), "snrt_cluster_hw_barrier",
       LLVM::LLVMFunctionType::get(builder.getType<LLVM::LLVMVoidType>(),
@@ -100,6 +243,9 @@ void ConvertSnitchToLLVM::runOnOperation() {
 
   RewritePatternSet patterns(&getContext());
   patterns.insert<L1MemoryViewOpLowering>(typeConverter);
+  patterns.insert<StartDMATransferOp1DLowering>(dmaStart1D, typeConverter);
+  patterns.insert<StartDMATransferOp2DLowering>(dmaStart2D, typeConverter);
+  patterns.insert<WaitForDMATransfersOpLowering>(dmaWait, typeConverter);
   patterns.insert<BarrierOpLowering>(barrier, typeConverter);
 
   LLVMConversionTarget target(getContext());
