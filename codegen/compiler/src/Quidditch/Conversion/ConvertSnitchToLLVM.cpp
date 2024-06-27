@@ -125,8 +125,13 @@ struct StartDMATransferOp1DLowering
     SmallVector<Value> sizes;
     SmallVector<Value> strides;
     Value totalSize;
-    getMemRefDescriptorSizes(op->getLoc(), op.getSource().getType(),
-                             dynamicSizes, rewriter, sizes, strides, totalSize);
+    getMemRefDescriptorSizes(
+        op->getLoc(),
+        // Offsets are not considered an identity layout.
+        // Get rid of the layout entirely for the size calculation.
+        MemRefType::get(sourceMemRef.getShape(), sourceMemRef.getElementType(),
+                        nullptr, sourceMemRef.getMemorySpace()),
+        dynamicSizes, rewriter, sizes, strides, totalSize);
 
     rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, dmaStart1DFunc,
                                               ValueRange{
