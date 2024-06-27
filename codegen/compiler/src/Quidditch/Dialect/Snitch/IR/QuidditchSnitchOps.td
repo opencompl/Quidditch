@@ -121,4 +121,10 @@ def QuidditchSnitch_L1MemoryViewOp : QuidditchSnitch_Op<"l1_memory_view",
   }];
 }
 
+def QuidditchSnitch_BarrierOp : QuidditchSnitch_Op<"barrier"> {
+  let assemblyFormat = [{
+    attr-dict
+  }];
+}
+
 #endif
