@@ -216,6 +216,10 @@ public:
         .addPass(createCanonicalizerPass)
         .addPass(createLinalgGeneralizeNamedOpsPass);
 
+    modulePassManager.addPass(quidditch::Snitch::createSpecializeDMACodePass());
+    FunctionLikeNest(modulePassManager)
+        .addPass(createCanonicalizerPass)
+        .addPass(createCSEPass);
     modulePassManager.addPass(quidditch::createConvertToRISCVPass(
         {targetOptions.xDSLOptPath, targetOptions.assertCompiled}));
 
@@ -347,10 +351,14 @@ public:
       } else {
         // xDSL kernel.
 
-        // TODO: Replace with real DMA pointer. For now just a place holder that
-        //  is not used in the runtime but makes the dispatch recognizeable as
-        //  an xDSL dispatch.
-        dmaPointer = llvmFunc;
+        // TODO: This should use the attribute attached to the LLVM::LLVMFuncOp.
+        dmaPointer =
+            llvmModule->getFunction((llvmFunc->getName() + "$dma").str());
+        if (!dmaPointer) {
+          module.emitError()
+              << "failed to find DMA code for " << exportOp.getName();
+          return nullptr;
+        }
       }
       if (!llvmFunc)
         continue;

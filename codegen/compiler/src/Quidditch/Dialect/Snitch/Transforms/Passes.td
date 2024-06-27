@@ -25,4 +25,11 @@ def LowerL1AllocationsPass : InterfacePass<"quidditch-lower-l1-allocations",
   ];
 }
 
+def SpecializeDMACodePass : Pass<"quidditch-specialzie-dma-code",
+  "mlir::ModuleOp"> {
+  let description = [{
+
+  }];
+}
+
 #endif

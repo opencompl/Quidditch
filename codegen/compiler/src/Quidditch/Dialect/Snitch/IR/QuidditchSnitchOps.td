@@ -123,15 +123,19 @@ def QuidditchSnitch_L1MemoryViewOp : QuidditchSnitch_Op<"l1_memory_view",
 }
 
 def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer",
-  [MemoryEffects<[MemWrite]>]> {
+  [MemoryEffects<[MemWrite]>, SameOperandsElementType, SameOperandsShape]> {
 
-  // TODO: This is more restrictive than the hardware instruction.
-  //       The hardware instruction only allows strides on the outermost
-  //       dimension but is otherwise orthogonal to the actual rank.
-  // TODO: At least one of them must be in L1 I think.
+  let description = [{
+
+  }];
+
+  // TODO: In reality what the constraint here is, is that both of them must either be contiguous or if a dimension is
+  //       not contiguous in one of them, all dimensions prior to that must be contiguous (i.e. of equal size).
+  //       TODO: Not sure if we can or should support anything but striding the last dimension? (could do a loop
+  //       worst-case)
   let arguments = (ins
-    Arg<MemRefRankOf<[AnyType], [1, 2]>, "", [MemRead]>:$source,
-    Arg<MemRefRankOf<[AnyType], [1, 2]>, "", [MemWrite]>:$dest
+    Arg<MemRefRankOf<[AnyType], [1, 2]>, "source", [MemRead]>:$source,
+    Arg<MemRefRankOf<[AnyType], [1, 2]>, "destination", [MemWrite]>:$dest
   );
 
   let results = (outs QuidditchSnitch_DMATokenType:$token);
@@ -141,8 +145,8 @@ def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer"
   }];
 }
 
-def QuidditchSnitch_WaitForDMATransfersOp : QuidditchSnitch_Op<"wait_for_dma_transfers",
-  [MemoryEffects<[MemRead]>]> {
+def QuidditchSnitch_WaitForDMATransfersOp
+  : QuidditchSnitch_Op<"wait_for_dma_transfers"> {
 
   let arguments = (ins
     Variadic<QuidditchSnitch_DMATokenType>:$tokens

@@ -35,3 +35,8 @@ void quidditch_dispatch_queue_workgroup(
 
 /// Executes all queued workgroups and waits for them to finish.
 void quidditch_dispatch_execute_workgroups();
+
+/// Executes all queued workgroups and waits for them to finish.
+void quidditch_dispatch_start_executing_workgroup();
+
+void quidditch_dispatch_wait_for_workgroup();
