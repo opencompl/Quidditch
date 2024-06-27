@@ -61,6 +61,22 @@ struct L1MemoryViewOpLowering : ConvertOpToLLVMPattern<L1MemoryViewOp> {
     return success();
   }
 };
+
+struct BarrierOpLowering : ConvertOpToLLVMPattern<BarrierOp> {
+
+  LLVM::LLVMFuncOp barrierFunc;
+
+  BarrierOpLowering(LLVM::LLVMFuncOp barrierFunc,
+                    const LLVMTypeConverter &converter)
+      : ConvertOpToLLVMPattern(converter), barrierFunc(barrierFunc) {}
+
+  LogicalResult
+  matchAndRewrite(BarrierOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, barrierFunc, ValueRange());
+    return success();
+  }
+};
 } // namespace
 
 void ConvertSnitchToLLVM::runOnOperation() {
@@ -72,8 +88,19 @@ void ConvertSnitchToLLVM::runOnOperation() {
   options.overrideIndexBitwidth(32);
   LLVMTypeConverter typeConverter(&getContext(), options, &dataLayoutAnalysis);
 
+  auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
+  auto ptrType = builder.getType<LLVM::LLVMPointerType>();
+  IntegerType i32 = builder.getI32Type();
+  IntegerType sizeT = i32;
+  auto barrier = builder.create<LLVM::LLVMFuncOp>(
+      builder.getUnknownLoc(), "snrt_cluster_hw_barrier",
+      LLVM::LLVMFunctionType::get(builder.getType<LLVM::LLVMVoidType>(),
+                                  ArrayRef<Type>{}));
+  barrier->setAttr("hal.import.bitcode", builder.getUnitAttr());
+
   RewritePatternSet patterns(&getContext());
   patterns.insert<L1MemoryViewOpLowering>(typeConverter);
+  patterns.insert<BarrierOpLowering>(barrier, typeConverter);
 
   LLVMConversionTarget target(getContext());
   target.markUnknownOpDynamicallyLegal([](auto) { return true; });
