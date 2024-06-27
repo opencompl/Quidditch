@@ -62,6 +62,34 @@ struct L1MemoryViewOpLowering : ConvertOpToLLVMPattern<L1MemoryViewOp> {
   }
 };
 
+/// Returns true if this MemRef type is known to have a fully contiguous layout.
+bool isContiguous(MemRefType memRefType) {
+  MemRefLayoutAttrInterface layout = memRefType.getLayout();
+  if (!layout || layout.isIdentity())
+    return true;
+
+  // It is impossible to statically determine contiguity with dynamic strides.
+  auto strided = dyn_cast<StridedLayoutAttr>(layout);
+  if (!strided || llvm::any_of(strided.getStrides(), ShapedType::isDynamic))
+    return false;
+
+  // Calculate what the strides would be if it had an identity layout and check
+  // that they match.
+  ArrayRef<int64_t> shape = memRefType.getShape();
+  ArrayRef<int64_t> strides = strided.getStrides();
+  std::uint64_t currentIdentityStride = 1;
+  for (auto [dim, stride] : llvm::zip_equal(llvm::reverse(shape.drop_front()),
+                                            strides.drop_front())) {
+    if (currentIdentityStride != stride)
+      return false;
+
+    if (ShapedType::isDynamic(dim))
+      return false;
+    currentIdentityStride *= dim;
+  }
+  return currentIdentityStride == strided.getStrides().front();
+}
+
 struct StartDMATransferOp1DLowering
     : ConvertOpToLLVMPattern<StartDMATransferOp> {
 
@@ -70,21 +98,11 @@ struct StartDMATransferOp1DLowering
   StartDMATransferOp1DLowering(LLVM::LLVMFuncOp dmaStart1DFunc,
                                const LLVMTypeConverter &converter)
       : ConvertOpToLLVMPattern(converter, /*benefit=*/2),
-        dmaStart1DFunc(dmaStart1DFunc) {
-    setHasBoundedRewriteRecursion();
-  }
+        dmaStart1DFunc(dmaStart1DFunc) {}
 
   LogicalResult match(StartDMATransferOp op) const override {
-    MemRefLayoutAttrInterface sourceLayout =
-        op.getSource().getType().getLayout();
-    MemRefLayoutAttrInterface destLayout = op.getDest().getType().getLayout();
-    if (sourceLayout && !sourceLayout.isIdentity())
-      return failure();
-
-    if (destLayout && !destLayout.isIdentity())
-      return failure();
-
-    return success();
+    return success(isContiguous(op.getSource().getType()) &&
+                   isContiguous(op.getDest().getType()));
   }
 
   void rewrite(StartDMATransferOp op, OpAdaptor adaptor,
