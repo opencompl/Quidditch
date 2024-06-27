@@ -207,6 +207,7 @@ void ConvertSnitchToLLVM::runOnOperation() {
       builder.getUnknownLoc(), "snrt_dma_start_2d",
       LLVM::LLVMFunctionType::get(
           i32, ArrayRef<Type>{ptrType, ptrType, sizeT, sizeT, sizeT, sizeT}));
+  dmaStart2D->setAttr("hal.import.bitcode", builder.getUnitAttr());
   // TODO: This should wait for only a specific transfer not all.
   //       This is currently bugged in the snitch_cluster repo.
   auto dmaWait = builder.create<LLVM::LLVMFuncOp>(
