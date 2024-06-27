@@ -96,6 +96,8 @@ iree_status_t quidditch_executable_create(
     executable->identifier = iree_make_cstring_view((*library_header)->name);
     executable->dispatch_attrs = executable->library.v0->exports.attrs;
   }
+  executable->is_llvm = !iree_string_view_equal(
+      executable_params->executable_format, IREE_SV("snitch"));
 
   // Copy executable constants so we own them.
   if (iree_status_is_ok(status) && executable_params->constant_count > 0) {
@@ -164,7 +166,7 @@ iree_status_t quidditch_executable_issue_dispatch_inline(
   });
 #endif  // IREE_HAL_VERBOSE_TRACING_ENABLE
 
-  iree_hal_executable_workgroup_state_v0_t workgroup_state;
+  iree_hal_executable_workgroup_state_v0_t workgroup_state = {0};
 
   workgroup_state.local_memory = local_memory.data;
   workgroup_state.local_memory_size = (size_t)local_memory.data_length;
@@ -181,19 +183,39 @@ iree_status_t quidditch_executable_issue_dispatch_inline(
                                 dispatch_state);
 
   read_csr(mcycle);
-  for (uint32_t z = 0; z < workgroup_count_z; ++z) {
-    workgroup_state.workgroup_id_z = z;
-    for (uint32_t y = 0; y < workgroup_count_y; ++y) {
-      workgroup_state.workgroup_id_y = y;
-      for (uint32_t x = 0; x < workgroup_count_x; ++x) {
-        workgroup_state.workgroup_id_x = x;
+  if (executable->is_llvm) {
+    // LLVM distributes workgroups to compute cores.
+    for (uint32_t z = 0; z < workgroup_count_z; ++z) {
+      workgroup_state.workgroup_id_z = z;
+      for (uint32_t y = 0; y < workgroup_count_y; ++y) {
+        workgroup_state.workgroup_id_y = y;
+        for (uint32_t x = 0; x < workgroup_count_x; ++x) {
+          workgroup_state.workgroup_id_x = x;
 
-        quidditch_dispatch_queue_workgroup(&workgroup_state);
+          quidditch_dispatch_queue_workgroup(&workgroup_state);
+        }
+      }
+    }
+
+    quidditch_dispatch_execute_workgroups();
+  } else {
+    // Snitch distributes workgroups to clusters.
+    // I.e., one workgroup runs on one cluster.
+    // TODO: Subgroup distribution.
+    for (uint32_t z = 0; z < workgroup_count_z; ++z) {
+      workgroup_state.workgroup_id_z = z;
+      for (uint32_t y = 0; y < workgroup_count_y; ++y) {
+        workgroup_state.workgroup_id_y = y;
+        for (uint32_t x = 0; x < workgroup_count_x; ++x) {
+          workgroup_state.workgroup_id_x = x;
+
+          quidditch_dispatch_queue_workgroup(&workgroup_state);
+          quidditch_dispatch_execute_workgroups();
+        }
       }
     }
   }
 
-  quidditch_dispatch_execute_workgroups();
   read_csr(mcycle);
 
   if (quidditch_dispatch_errors_occurred())

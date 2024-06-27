@@ -100,7 +100,9 @@ static bool quidditch_loader_query_support(
     iree_hal_executable_caching_mode_t caching_mode,
     iree_string_view_t executable_format) {
   return iree_string_view_equal(executable_format,
-                                iree_make_cstring_view("static"));
+                                iree_make_cstring_view("static")) ||
+         iree_string_view_equal(executable_format,
+                                iree_make_cstring_view("snitch"));
 }
 
 static iree_status_t quidditch_loader_try_load(
