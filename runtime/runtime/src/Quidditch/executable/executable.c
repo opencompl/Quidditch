@@ -230,6 +230,9 @@ iree_status_t quidditch_executable_issue_dispatch_inline(
     // Snitch distributes workgroups to clusters.
     // I.e., one workgroup runs on one cluster.
     // TODO: Subgroup distribution.
+    iree_hal_executable_dispatch_v0_t const dmaCoreFunction =
+        ((quidditch_executable_export_table_v0_t*)exports)
+            ->dma_core_ptrs[ordinal];
     for (uint32_t z = 0; z < workgroup_count_z; ++z) {
       workgroup_state.workgroup_id_z = z;
       for (uint32_t y = 0; y < workgroup_count_y; ++y) {
@@ -238,7 +241,12 @@ iree_status_t quidditch_executable_issue_dispatch_inline(
           workgroup_state.workgroup_id_x = x;
 
           quidditch_dispatch_queue_workgroup(&workgroup_state);
-          quidditch_dispatch_execute_workgroups();
+          quidditch_dispatch_start_executing_workgroup();
+
+          dmaCoreFunction(&executable->environment, dispatch_state,
+                          &workgroup_state);
+
+          quidditch_dispatch_wait_for_workgroup();
         }
       }
     }

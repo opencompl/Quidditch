@@ -9,7 +9,8 @@ def QuidditchSnitch_Dialect : Dialect {
 
   let discardableAttrs = (ins
     "mlir::StringAttr":$riscv_assembly,
-    "mlir::UnitAttr":$xdsl_compilation_failed
+    "mlir::UnitAttr":$xdsl_compilation_failed,
+    "mlir::FlatSymbolRefAttr":$dma_specialization
   );
 
   let useDefaultAttributePrinterParser = 1;

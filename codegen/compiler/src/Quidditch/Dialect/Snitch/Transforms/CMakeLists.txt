@@ -16,6 +16,7 @@ iree_cc_library(
         SRCS
         "PromoteToL1.cpp"
         "LowerL1Allocations.cpp"
+        "SpecializeDMACode.cpp"
         DEPS
         ::PassesIncGen
         Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
