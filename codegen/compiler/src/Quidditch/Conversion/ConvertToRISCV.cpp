@@ -112,13 +112,10 @@ ConvertToRISCV::convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
   int ret = llvm::sys::ExecuteAndWait(
       xDSLOptPath,
       {xDSLOptPath, "-p",
-       "convert-linalg-to-memref-stream,memref-streamify,convert-"
-       "memref-stream-to-loops,scf-for-loop-flatten,"
-       "arith-add-fastmath,loop-hoist-memref,lower-affine,convert-memref-"
-       "stream-to-snitch,convert-func-to-"
-       "riscv-func,convert-memref-to-riscv,convert-arith-to-riscv,"
-       "convert-scf-to-riscv-scf,dce,reconcile-unrealized-casts,test-"
-       "lower-snitch-stream-to-asm",
+       "convert-linalg-to-memref-stream,"
+       "test-optimise-memref-stream," // NOLINT(*-suspicious-missing-comma)
+       "test-lower-memref-stream-to-snitch-stream,"
+       "test-lower-snitch-stream-to-asm",
        "-t", "riscv-asm"},
       std::nullopt, redirects);
   if (ret != 0) {
