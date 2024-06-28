@@ -7,16 +7,33 @@ add_executable(HelloWorld main.c)
 target_link_libraries(HelloWorld snRuntime)
 
 macro(test_executable target_name)
+  cmake_parse_arguments(_RULE "PRECOMMIT;NIGHTLY" "" "" ${ARGN})
+
+  set(label)
+  if (_RULE_PRECOMMIT)
+    set(label "precommit")
+  elseif (_RULE_NIGHTLY)
+    set(label "nightly")
+  else ()
+    message(FATAL_ERROR "Test must either be in precommit or nightly")
+  endif ()
+
   file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${target_name}.test)
   add_test(NAME ${target_name}
       COMMAND ${target_name}
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${target_name}.test)
-  set_tests_properties(${target_name} PROPERTIES FIXTURES_REQUIRED ${target_name}-fixture)
+  set_tests_properties(${target_name} PROPERTIES
+      FIXTURES_REQUIRED ${target_name}-fixture
+      LABELS ${label}
+  )
 
   add_test(NAME ${target_name}-setup
       COMMAND rm -rf ${CMAKE_CURRENT_BINARY_DIR}/${target_name}.test/*
   )
-  set_tests_properties(${target_name}-setup PROPERTIES FIXTURES_SETUP ${target_name}-fixture)
+  set_tests_properties(${target_name}-setup PROPERTIES
+      FIXTURES_SETUP ${target_name}-fixture
+      LABELS ${label}
+  )
 
   set(gen_traces_targets)
   set(gen_traces_jsons)
@@ -35,6 +52,7 @@ macro(test_executable target_name)
     )
     set_tests_properties(${target_name}-analysis-hart-${i} PROPERTIES
         FIXTURES_CLEANUP ${target_name}-fixture
+        LABELS ${label}
     )
     list(APPEND gen_traces_targets "${target_name}-analysis-hart-${i}")
     list(APPEND gen_traces_jsons "${CMAKE_CURRENT_BINARY_DIR}/${target_name}.test/hart_${i}_perf.json")
@@ -53,9 +71,13 @@ macro(test_executable target_name)
   set_tests_properties(${target_name}-events.json PROPERTIES
       FIXTURES_CLEANUP ${target_name}-fixture
       DEPENDS "${gen_traces_targets}"
+      LABELS ${label}
   )
 endmacro()
 
-test_executable(HelloWorld)
-test_executable(vec_multiply)
-# test_executable(NsNet2LLVM)
+test_executable(HelloWorld PRECOMMIT)
+test_executable(vec_multiply PRECOMMIT)
+test_executable(NsNet2 NIGHTLY)
+test_executable(NsNet2LLVM NIGHTLY)
+test_executable(NsNet2ST NIGHTLY)
+test_executable(NsNet2STLLVM NIGHTLY)

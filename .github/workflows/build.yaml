@@ -8,6 +8,9 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0'
 
 jobs:
   build:
@@ -72,5 +75,11 @@ jobs:
           -DOVERRIDE_VENV=ON \
           -S ${{github.workspace}}
 
-      - name: Build and Test
+      # TODO: Flip before running.
+      - name: Build and Test precommit
+        if: ${{ github.event_name == 'schedule' }}
+        run: cmake --build ${{github.workspace}}/build --target test
+
+      - name: Build and Test nightly
+        if: ${{ github.event_name != 'schedule' }}
         run: cmake --build ${{github.workspace}}/build --target test

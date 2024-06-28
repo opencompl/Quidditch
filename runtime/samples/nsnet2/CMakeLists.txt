@@ -14,27 +14,45 @@ target_link_libraries(nsnet2_util
 )
 target_include_directories(nsnet2_util INTERFACE ${CMAKE_CURRENT_LIST_DIR})
 
-macro(create_experiment_variant target_name iree_module query_func)
-  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/${target_name}.c "\
-#include <${iree_module}.h>
+macro(create_experiment_variant)
+  cmake_parse_arguments(_RULE "PRECOMMIT;NIGHTLY" "TARGET;IREE_MODULE;QUERY_FUNC" "" ${ARGN})
+
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/${_RULE_TARGET}.c "\
+#include <${_RULE_IREE_MODULE}.h>
 
 #include \"nsnet2_util.h\"
 
 int main() {
-  return run_nsnet2_experiment(${query_func});
+  return run_nsnet2_experiment(${_RULE_QUERY_FUNC});
 }
 ")
-  add_executable(${target_name} ${CMAKE_CURRENT_BINARY_DIR}/${target_name}.c)
+  add_executable(${_RULE_TARGET} ${CMAKE_CURRENT_BINARY_DIR}/${_RULE_TARGET}.c)
   target_link_libraries(
-      ${target_name}
+      ${_RULE_TARGET}
       PRIVATE
       nsnet2_util
-      ${iree_module}
+      ${_RULE_IREE_MODULE}
       snRuntime
   )
 endmacro()
 
-create_experiment_variant(NsNet2 nsnet2 "quidditch_compiled_ns_net2_linked_quidditch_library_query")
-create_experiment_variant(NsNet2LLVM nsnet2_llvm "compiled_ns_net2_linked_llvm_cpu_library_query")
-create_experiment_variant(NsNet2ST nsnet2st "quidditch_compiled_ns_net2_linked_quidditch_library_query")
-create_experiment_variant(NsNet2STLLVM nsnet2st_llvm "compiled_ns_net2_linked_llvm_cpu_library_query")
+create_experiment_variant(
+    TARGET NsNet2
+    IREE_MODULE nsnet2
+    QUERY_FUNC "quidditch_compiled_ns_net2_linked_quidditch_library_query"
+)
+create_experiment_variant(
+    TARGET NsNet2LLVM
+    IREE_MODULE nsnet2_llvm
+    QUERY_FUNC "compiled_ns_net2_linked_llvm_cpu_library_query"
+)
+create_experiment_variant(
+    TARGET NsNet2ST
+    IREE_MODULE nsnet2st
+    QUERY_FUNC "quidditch_compiled_ns_net2_linked_quidditch_library_query"
+)
+create_experiment_variant(
+    TARGET NsNet2STLLVM
+    IREE_MODULE nsnet2st_llvm
+    QUERY_FUNC "compiled_ns_net2_linked_llvm_cpu_library_query"
+)
