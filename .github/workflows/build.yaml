@@ -82,4 +82,4 @@ jobs:
 
       - name: Build and Test nightly
         if: ${{ github.event_name != 'schedule' }}
-        run: cmake --build ${{github.workspace}}/build --target test
+        run: cmake --build ${{github.workspace}}/build --target test-nightly
