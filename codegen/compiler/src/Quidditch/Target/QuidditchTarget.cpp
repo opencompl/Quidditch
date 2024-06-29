@@ -335,33 +335,37 @@ public:
       return nullptr;
     }
 
+    auto *dialect =
+        module.getContext()->getLoadedDialect<QuidditchSnitchDialect>();
+
+    SymbolTable symbolTable(module);
     Quidditch::LibraryBuilder libraryBuilder(
         llvmModule.get(), Quidditch::LibraryBuilder::Mode::NONE,
         Quidditch::LibraryBuilder::Version::LATEST);
     auto align16 = llvm::Attribute::getWithAlignment(context, llvm::Align(16));
     for (auto exportOp :
          variantOp.getBlock().getOps<IREE::HAL::ExecutableExportOp>()) {
-      llvm::Function *dmaPointer = nullptr;
       // Find the matching function in the LLVM module.
-      auto *llvmFunc =
-          llvmModule->getFunction((exportOp.getName() + "$iree_to_xdsl").str());
-      if (!llvmFunc) {
-        // LLVMCPU kernel rather than xDSL.
-        llvmFunc = llvmModule->getFunction(exportOp.getName());
-      } else {
-        // xDSL kernel.
-
-        // TODO: This should use the attribute attached to the LLVM::LLVMFuncOp.
-        dmaPointer =
-            llvmModule->getFunction((llvmFunc->getName() + "$dma").str());
-        if (!dmaPointer) {
-          module.emitError()
-              << "failed to find DMA code for " << exportOp.getName();
-          return nullptr;
-        }
-      }
+      auto *llvmFunc = llvmModule->getFunction((exportOp.getName()).str());
       if (!llvmFunc)
         continue;
+
+      llvm::Function *dmaPointer = nullptr;
+      if (Operation *mlirFunc = symbolTable.lookup(exportOp.getName())) {
+        if (FlatSymbolRefAttr dmaFunc =
+                dialect->getDmaSpecializationAttrHelper().getAttr(mlirFunc)) {
+          dmaPointer = llvmModule->getFunction(dmaFunc.getValue());
+          if (!dmaPointer) {
+            module.emitError()
+                << "failed to find DMA code for " << exportOp.getName();
+            return nullptr;
+          }
+          dmaPointer->setLinkage(
+              llvm::GlobalValue::LinkageTypes::InternalLinkage);
+          // Name suffix recognized by tooling for xDSL generated kernels.
+          llvmFunc->setName(llvmFunc->getName() + "$iree_to_xdsl");
+        }
+      }
 
       llvmFunc->setLinkage(llvm::GlobalValue::LinkageTypes::InternalLinkage);
       llvmFunc->setDSOLocal(true);
