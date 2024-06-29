@@ -214,7 +214,8 @@ public:
         })
         .addPass(quidditch::createReluToMaxPass)
         .addPass(createCanonicalizerPass)
-        .addPass(createLinalgGeneralizeNamedOpsPass);
+        .addPass(createLinalgGeneralizeNamedOpsPass)
+        .addPass(createRemoveSingleIterationLoopPass);
 
     modulePassManager.addPass(quidditch::Snitch::createSpecializeDMACodePass());
     FunctionLikeNest(modulePassManager)
