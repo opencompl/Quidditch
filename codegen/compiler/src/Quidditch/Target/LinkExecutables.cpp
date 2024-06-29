@@ -113,20 +113,25 @@ void LinkExecutables::runOnOperation() {
   SymbolTable llvmTable(llvmVariant.getInnerModule());
   for (auto func : llvm::to_vector(
            quidditchVariant.getInnerModule().getOps<LLVM::LLVMFuncOp>())) {
-    StringRef symName = func.getSymName();
-    if (!symName.consume_back("$iree_to_xdsl"))
+    auto llvmFuncOp = llvmTable.lookup<LLVM::LLVMFuncOp>(func.getSymNameAttr());
+    if (!llvmFuncOp)
       continue;
 
+    // Logic here is a bit odd, but basically we count any function in our
+    // module that also appears in the LLVM version, as being an xDSL entry
+    // point. We could also just check and find the entry point function.
     xDSLFunctionsEncountered++;
 
     if (!dialect->getXdslCompilationFailedAttrHelper().isAttrPresent(func))
       continue;
 
-    auto llvmFuncOp = llvmTable.lookup<LLVM::LLVMFuncOp>(symName);
-    if (!llvmFuncOp)
-      continue;
-
     xDSLFunctionsReplaced++;
+
+    // DMA Function is no longer needed either.
+    if (FlatSymbolRefAttr dmaFunc =
+            dialect->getDmaSpecializationAttrHelper().getAttr(func))
+      if (Operation *op = quidditchTable.lookup(dmaFunc.getAttr()))
+        op->erase();
 
     func.erase();
     LLVM::LLVMFuncOp clone = llvmFuncOp.clone();

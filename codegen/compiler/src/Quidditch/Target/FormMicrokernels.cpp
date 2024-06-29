@@ -65,10 +65,6 @@ static void outlineOpsToFunction(MutableArrayRef<linalg::LinalgOp> ops) {
 void FormMicrokernels::runOnOperation() {
   FunctionOpInterface func = getOperation();
 
-  // We add this suffix for tooling to know whether the kernel was xDSL
-  // compiled. It should have as little semantic impact as possible.
-  func.setName((func.getName() + "$iree_to_xdsl").str());
-
   SmallVector<linalg::LinalgOp> outlinedOps;
   func.walk([&](Block *block) {
     for (Operation &op : *block) {
