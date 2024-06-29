@@ -366,8 +366,8 @@ void MemRefMicrokernelOp::getRegionInvocationBounds(
 // CopyL1TensorOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult CopyL1TensorOp::fold(FoldAdaptor adaptor) {
-  if (auto source = getCopy().getDefiningOp<CopyL1TensorOp>()) {
+OpFoldResult CopyTensorOp::fold(FoldAdaptor adaptor) {
+  if (auto source = getCopy().getDefiningOp<CopyTensorOp>()) {
     getCopyMutable().set(source.getCopy());
     return getResult();
   }
@@ -378,82 +378,129 @@ OpFoldResult CopyL1TensorOp::fold(FoldAdaptor adaptor) {
 // CopyL1TensorOp::BufferizableOpInterface
 //===----------------------------------------------------------------------===//
 
-bool CopyL1TensorOp::resultBufferizesToMemoryWrite(
-    OpResult opResult, const bufferization::AnalysisState &state) {
+static std::optional<bool>
+addressSpaceMatches(bool toL1Memory, Value copy,
+                    const bufferization::BufferizationOptions &options = {},
+                    SmallVector<Value> *invocationStack = nullptr) {
   FailureOr<BaseMemRefType> copyType =
-      bufferization::getBufferType(getCopy(), state.getOptions());
-  FailureOr<BaseMemRefType> allocType =
-      bufferization::getBufferType(getResult(), state.getOptions());
-  if (failed(copyType) || failed(allocType))
-    return true;
+      invocationStack
+          ? bufferization::getBufferType(copy, options, *invocationStack)
+          : bufferization::getBufferType(copy, options);
+  if (failed(copyType))
+    return std::nullopt;
+
+  return toL1Memory ==
+         isa_and_nonnull<L1EncodingAttr>(copyType->getMemorySpace());
+}
+
+bool CopyTensorOp::resultBufferizesToMemoryWrite(
+    OpResult opResult, const bufferization::AnalysisState &state) {
+  assert(opResult == getResult() && "no other result");
 
   // No copy is performed unless the address space does not match.
   // Copy in this context implies that we are writing to the result.
-  return *allocType != *copyType;
+  return addressSpaceMatches(getTransfersToL1(), getCopy(), state.getOptions())
+      .value_or(true);
 }
 
-bool CopyL1TensorOp::bufferizesToMemoryRead(
-    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+bool CopyTensorOp::bufferizesToMemoryRead(
+    OpOperand &opOperand, const bufferization::AnalysisState &) {
+  assert(opOperand == getCopyMutable() && "have only one operand");
+
+  // We read from the buffer we are copying.
   return true;
 }
 
-bool CopyL1TensorOp::bufferizesToMemoryWrite(
-    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+bool CopyTensorOp::bufferizesToMemoryWrite(
+    OpOperand &opOperand, const bufferization::AnalysisState &) {
+  assert(opOperand == getCopyMutable() && "have only one operand");
+
   // We do not write into the buffer we are copying.
   return false;
 }
 
 AliasingValueList
-CopyL1TensorOp::getAliasingValues(OpOperand &opOperand,
-                                  const bufferization::AnalysisState &state) {
-  FailureOr<BaseMemRefType> allocType =
-      bufferization::getBufferType(getResult(), state.getOptions());
-  FailureOr<BaseMemRefType> copyType =
-      bufferization::getBufferType(getCopy(), state.getOptions());
-  if (failed(copyType) || failed(allocType))
-    // Assume worst case.
-    return {{getResult(), BufferRelation::Equivalent, false}};
+CopyTensorOp::getAliasingValues(OpOperand &opOperand,
+                                const bufferization::AnalysisState &state) {
+  assert(opOperand == getCopyMutable() && "have only one operand");
 
-  // Always a brand-new allocation unless the address space matches.
-  if (*allocType == *copyType)
+  std::optional<bool> matches =
+      addressSpaceMatches(getTransfersToL1(), getCopy(), state.getOptions());
+  if (!matches)
+    // Assume the worst case.
+    return {{getResult(), BufferRelation::Equivalent, /*isDefinite=*/false}};
+
+  // Always a brand-new allocation unless the address space matches and we elide
+  // the copy, in which case operand and result alias.
+  if (!*matches)
     return {{getResult(), BufferRelation::Equivalent}};
-
   return {};
 }
 
-FailureOr<BaseMemRefType>
-CopyL1TensorOp::getBufferType(Value value, const BufferizationOptions &options,
-                              SmallVector<Value> &invocationStack) {
-  return getMemRefTypeWithStaticIdentityLayout(
-      getType(),
-      getTransferToL1() ? L1EncodingAttr::get(getContext()) : nullptr);
+bool CopyTensorOp::bufferizesToAllocation(Value value) {
+  assert(value == getResult() && "have only one result");
+
+  // True is the conservative reply according to the docs.
+  return addressSpaceMatches(getTransfersToL1(), getCopy()).value_or(true);
 }
 
-LogicalResult CopyL1TensorOp::bufferize(RewriterBase &rewriter,
-                                        const BufferizationOptions &options) {
+FailureOr<BaseMemRefType>
+CopyTensorOp::getBufferType(Value value, const BufferizationOptions &options,
+                            SmallVector<Value> &invocationStack) {
+  assert(value == getResult() && "have only one result");
+
+  bool contained = llvm::is_contained(invocationStack, value);
+  if (!contained)
+    if (addressSpaceMatches(getTransfersToL1(), getCopy(), options,
+                            &invocationStack)
+            .value_or(false))
+      return bufferization::getBufferType(getCopy(), options, invocationStack);
+
+  // Unless contained in the invocation stack (where we are free to impose the
+  // most optimal layout), we do not really impose a specific layout on the
+  // result. Contiguous is a good bet for now.
+  Attribute memorySpace =
+      getTransfersToL1() ? L1EncodingAttr::get(getContext()) : nullptr;
+  return getMemRefTypeWithStaticIdentityLayout(getResult().getType(),
+                                               memorySpace);
+}
+
+LogicalResult CopyTensorOp::bufferize(RewriterBase &rewriter,
+                                      const BufferizationOptions &options) {
   if (use_empty()) {
     rewriter.eraseOp(*this);
     return success();
   }
-
-  FailureOr<Value> copyBuffer = getBuffer(rewriter, getCopy(), options);
-  if (failed(copyBuffer))
-    return failure();
 
   FailureOr<BaseMemRefType> copyType =
       bufferization::getBufferType(getCopy(), options);
   if (failed(copyType))
     return failure();
 
+  FailureOr<Value> copyBuffer = getBuffer(rewriter, getCopy(), options);
+  if (failed(copyBuffer))
+    return failure();
+
+  std::optional<bool> matches =
+      addressSpaceMatches(getTransfersToL1(), getCopy(), options);
+  if (!matches)
+    return failure();
+
+  if (*matches) {
+    replaceOpWithBufferizedValues(rewriter, getOperation(), *copyBuffer);
+    return success();
+  }
+
   FailureOr<BaseMemRefType> allocType =
       bufferization::getBufferType(getResult(), options);
   if (failed(allocType))
     return failure();
 
-  if (*allocType == *copyType) {
-    replaceOpWithBufferizedValues(rewriter, getOperation(), *copyBuffer);
-    return success();
-  }
+  // TODO: Add operands to the op representing the dynamic dimensions of the
+  //  result tensor and use them below.
+  if (!allocType->hasStaticShape())
+    return emitOpError(
+        "Bufferizing results with dynamic dimensions is not yet implemented");
 
   FailureOr<Value> alloc = options.createAlloc(
       rewriter, getLoc(), llvm::cast<MemRefType>(*allocType),

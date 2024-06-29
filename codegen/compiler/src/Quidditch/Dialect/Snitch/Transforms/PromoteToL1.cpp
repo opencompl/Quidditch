@@ -32,7 +32,7 @@ void PromoteToL1::runOnOperation() {
     }
 
     OpBuilder builder(tensorOp);
-    Value replacement = builder.create<CopyL1TensorOp>(
+    Value replacement = builder.create<CopyTensorOp>(
         tensorOp.getLoc(), tensorOp, /*transfers_to_l1=*/true);
     tensorOp.replaceAllUsesWith(replacement);
     tensorOp.erase();
@@ -53,9 +53,9 @@ void PromoteToL1::runOnOperation() {
     // Create copies into L1 for all tensors used in the kernel.
     auto builder = OpBuilder(microkernelOp);
     for (TypedValue<RankedTensorType> value : nonL1Uses) {
-      auto copyOp = builder.create<CopyL1TensorOp>(microkernelOp.getLoc(),
-                                                   /*copy=*/value,
-                                                   /*transfers_to_l1=*/true);
+      auto copyOp = builder.create<CopyTensorOp>(microkernelOp.getLoc(),
+                                                 /*copy=*/value,
+                                                 /*transfers_to_l1=*/true);
       value.replaceUsesWithIf(copyOp, [&](OpOperand &operand) {
         return microkernelOp.getBody().isAncestor(
             operand.getOwner()->getParentRegion());
