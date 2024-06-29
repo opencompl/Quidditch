@@ -82,29 +82,29 @@ def QuidditchSnitch_MemRefMicrokernelOp
   }];
 }
 
-def QuidditchSnitch_CopyL1TensorOp : QuidditchSnitch_Op<"copy_l1_tensor",
+def QuidditchSnitch_CopyTensorOp : QuidditchSnitch_Op<"copy_tensor",
   [SameOperandsAndResultType, NoMemoryEffect,
    DeclareOpInterfaceMethods<BufferizableOpInterface,
     ["resultBufferizesToMemoryWrite", "bufferizesToMemoryRead",
      "bufferizesToMemoryWrite", "getAliasingValues", "getBufferType",
-      "bufferize"]>]> {
+      "bufferize", "bufferizesToAllocation"]>]> {
 
   let description = [{
-    Operation performing copies of tensors between memory spaces.
-    If `$transfer_to_l1` is true, then the op ensures that the resulting tensor
-    is in L1.
+    Operation performing a copy of a tensor to another memory spaces.
+    If `$transfers_to_l1` is true, then the op ensures that the resulting
+    tensor is in L1 memory.
     Otherwise, the output tensor is guaranteed to be in L3 memory.
     This operation is a noop if `$copy` and `$result` are already in the same
-    memory space.
+    memory space and bufferization can elide the copy.
   }];
 
   // TODO: Not a big fan of the UnitAttr. This should be an enum.
-  let arguments = (ins AnyStaticShapeTensor:$copy, UnitAttr:$transfer_to_l1);
+  let arguments = (ins AnyRankedTensor:$copy, UnitAttr:$transfers_to_l1);
 
-  let results = (outs AnyStaticShapeTensor:$result);
+  let results = (outs AnyRankedTensor:$result);
 
   let assemblyFormat = [{
-    $copy `to` ( `L1` $transfer_to_l1^) : (`L3`)? `:` type($copy) attr-dict
+    $copy `to` ( `L1` $transfers_to_l1^) : (`L3`)? `:` type($copy) attr-dict
   }];
 
   let hasFolder = 1;
