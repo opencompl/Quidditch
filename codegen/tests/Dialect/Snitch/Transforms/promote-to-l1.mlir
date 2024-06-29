@@ -6,9 +6,9 @@
 func.func @test(%a : tensor<32x32xf32>, %b : tensor<32x32xf32>) -> tensor<32x32xf32> {
   // CHECK: %[[E:.*]] = bufferization.alloc_tensor() {memory_space = #quidditch_snitch.l1_encoding}
   %e = bufferization.alloc_tensor() : tensor<32x32xf32>
-  // CHECK: %[[A2:.*]] = quidditch_snitch.copy_l1_tensor %[[A]] to L1
-  // CHECK: %[[B2:.*]] = quidditch_snitch.copy_l1_tensor %[[B]] to L1
-  // CHECK: %[[E2:.*]] = quidditch_snitch.copy_l1_tensor %[[E]] to L1
+  // CHECK: %[[A2:.*]] = quidditch_snitch.copy_tensor %[[A]] to L1
+  // CHECK: %[[B2:.*]] = quidditch_snitch.copy_tensor %[[B]] to L1
+  // CHECK: %[[E2:.*]] = quidditch_snitch.copy_tensor %[[E]] to L1
   // CHECK: %[[R:.*]] = quidditch_snitch.tensor.microkernel
   %r = quidditch_snitch.tensor.microkernel -> tensor<32x32xf32> {
     // CHECK: linalg.matmul ins(%[[A2]], %[[B2]] : {{.*}}) outs(%[[E2]] : {{.*}})
