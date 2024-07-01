@@ -28,10 +28,7 @@ using namespace mlir;
 using namespace quidditch::Snitch;
 
 static void removeComputeOps(FunctionOpInterface dmaCode) {
-  dmaCode->walk([&](MemRefMicrokernelOp operation) {
-    // TODO: These can have results in theory which would make this crash!
-    operation->erase();
-  });
+  dmaCode->walk([&](MemRefMicrokernelOp operation) { operation->erase(); });
 }
 
 static void removeDmaCode(FunctionOpInterface computeCode) {

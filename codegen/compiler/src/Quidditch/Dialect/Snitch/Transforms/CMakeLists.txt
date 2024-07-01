@@ -14,6 +14,7 @@ iree_cc_library(
         "Passes.h"
         "Passes.h.inc"
         SRCS
+        "FormMicrokernels.cpp"
         "PromoteToL1.cpp"
         "LowerL1Allocations.cpp"
         "SpecializeDMACode.cpp"

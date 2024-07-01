@@ -23,7 +23,6 @@ iree_cc_library(
         SRCS
         "ConfigureForSnitch.cpp"
         "DisableQuidditchVariant.cpp"
-        "FormMicrokernels.cpp"
         "LinkExecutables.cpp"
         "ReluToMax.cpp"
         DEPS

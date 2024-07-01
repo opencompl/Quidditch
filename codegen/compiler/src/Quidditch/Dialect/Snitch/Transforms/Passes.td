@@ -3,6 +3,13 @@
 
 include "mlir/Pass/PassBase.td"
 
+def FormMicrokernelsPass
+  : InterfacePass<"quidditch-form-microkernels", "mlir::FunctionOpInterface"> {
+  let dependentDialects = [
+    "quidditch::Snitch::QuidditchSnitchDialect",
+  ];
+}
+
 def PromoteOperandsToL1Pass : Pass<"quidditch-promote-operands-to-l1"> {
   let description = [{
     TODO:

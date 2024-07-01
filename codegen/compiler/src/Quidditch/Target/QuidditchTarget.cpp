@@ -176,8 +176,7 @@ public:
         .addPass(createCSEPass)
         .addPass(createFuseTensorPadWithConsumerPass)
         .addPass(createConcretizePadResultShapePass)
-        .addPass(quidditch::Snitch::createPromoteOperandsToL1Pass)
-        .addPass(quidditch::createFormMicrokernelsPass);
+        .addPass(quidditch::Snitch::createPromoteOperandsToL1Pass);
 
     BufferizationOptions::AllocationFn allocationFn =
         [](OpBuilder &builder, Location loc, MemRefType memRefType,
@@ -216,7 +215,8 @@ public:
         .addPass(quidditch::createReluToMaxPass)
         .addPass(createCanonicalizerPass)
         .addPass(createLinalgGeneralizeNamedOpsPass)
-        .addPass(createRemoveSingleIterationLoopPass);
+        .addPass(createRemoveSingleIterationLoopPass)
+        .addPass(quidditch::Snitch::createFormMicrokernelsPass);
 
     modulePassManager.addPass(quidditch::Snitch::createSpecializeDMACodePass());
     FunctionLikeNest(modulePassManager)

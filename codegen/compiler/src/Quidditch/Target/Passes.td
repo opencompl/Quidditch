@@ -3,13 +3,6 @@
 
 include "mlir/Pass/PassBase.td"
 
-def FormMicrokernelsPass
-  : InterfacePass<"quidditch-form-microkernels", "mlir::FunctionOpInterface"> {
-  let dependentDialects = [
-    "quidditch::Snitch::QuidditchSnitchDialect",
-  ];
-}
-
 def LinkExecutablesPass : Pass<"quidditch-link-executables", "mlir::ModuleOp"> {
   let description = [{
     Combines all `hal.executable.variant`s of the same target into a single

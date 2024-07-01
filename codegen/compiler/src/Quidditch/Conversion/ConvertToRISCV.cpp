@@ -71,17 +71,12 @@ ConvertToRISCV::convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
   OpBuilder builder(&getContext());
   OwningOpRef<func::FuncOp> tempFuncOp = builder.create<func::FuncOp>(
       kernelOp.getLoc(), kernelName,
-      builder.getFunctionType(kernelOp.getBody().getArgumentTypes(),
-                              kernelOp.getResultTypes()));
+      builder.getFunctionType(kernelOp.getBody().getArgumentTypes(), {}));
   IRMapping mapping;
   kernelOp.getBody().cloneInto(&tempFuncOp->getBody(), mapping);
   builder.setInsertionPointToEnd(&tempFuncOp->getBody().back());
-  tempFuncOp->getBody().back().getTerminator()->erase();
 
-  SmallVector<Value> returns;
-  for (Value value : kernelOp.getYieldOp().getResults())
-    returns.push_back(mapping.lookupOrDefault(value));
-  builder.create<func::ReturnOp>(kernelOp.getLoc(), returns);
+  builder.create<func::ReturnOp>(kernelOp.getLoc());
 
   SmallString<64> stdinFile;
   int stdinFd;
@@ -175,8 +170,7 @@ void ConvertToRISCV::runOnOperation() {
 
     auto kernelDecl = builder.create<func::FuncOp>(
         kernelOp.getLoc(), kernelName,
-        builder.getFunctionType(kernelOp.getBody().getArgumentTypes(),
-                                kernelOp.getResultTypes()));
+        builder.getFunctionType(kernelOp.getBody().getArgumentTypes(), {}));
 
     kernelDecl.setVisibility(SymbolTable::Visibility::Private);
     // Required to tell the conversion pass to LLVM that this is actually a
@@ -188,9 +182,8 @@ void ConvertToRISCV::runOnOperation() {
     dialect->getRiscvAssemblyAttrHelper().setAttr(kernelDecl, *riscvAssembly);
 
     builder.setInsertionPoint(kernelOp);
-    auto callOp = builder.create<func::CallOp>(kernelOp.getLoc(), kernelDecl,
-                                               kernelOp.getInputs());
-    kernelOp.replaceAllUsesWith(callOp);
+    builder.create<func::CallOp>(kernelOp.getLoc(), kernelDecl,
+                                 kernelOp.getInputs());
     kernelOp.erase();
     return WalkResult::advance();
   });
