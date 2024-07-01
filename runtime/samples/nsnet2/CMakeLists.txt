@@ -2,8 +2,8 @@
 iree_turbine(SRC NsNet2.py DST ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc DTYPE "f64")
 quidditch_module(SRC ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc DST nsnet2)
 quidditch_module(SRC ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc LLVM DST nsnet2_llvm)
-quidditch_module(SRC ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc DST nsnet2st)
-quidditch_module(SRC ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc LLVM DST nsnet2st_llvm)
+quidditch_module(SRC ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc DST nsnet2st N_THREADS 1)
+quidditch_module(SRC ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc LLVM DST nsnet2st_llvm  N_THREADS 1)
 
 add_library(nsnet2_util nsnet2_util.c)
 target_link_libraries(nsnet2_util
