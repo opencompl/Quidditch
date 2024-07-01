@@ -36,6 +36,28 @@ def QuidditchSnitch_MemRefMicrokernelOp
   }];
 }
 
+def QuidditchSnitch_CallMicrokernelOp
+  : QuidditchSnitch_Op<"call_microkernel"> {
+
+  let description = [{
+
+  }];
+
+  let arguments = (ins StrAttr:$name, Variadic<AnyType>:$inputs, StrAttr:$riscv_assembly);
+
+  let assemblyFormat = [{
+    $name `(` $inputs `)` (`:` type($inputs)^)? `[``{`
+    custom<RISCVAssembly>($riscv_assembly)
+    `}` `]` attr-dict
+  }];
+
+  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    static bool supportsArgumentType(mlir::Type type);
+  }];
+}
+
 def QuidditchSnitch_CopyTensorOp : QuidditchSnitch_Op<"copy_tensor",
   [SameOperandsAndResultType, NoMemoryEffect,
    DeclareOpInterfaceMethods<BufferizableOpInterface,

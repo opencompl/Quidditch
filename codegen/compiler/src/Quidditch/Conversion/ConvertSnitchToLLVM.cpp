@@ -232,6 +232,67 @@ struct BarrierOpLowering : ConvertOpToLLVMPattern<BarrierOp> {
     return success();
   }
 };
+
+struct CallMicrokernelOpLowering : ConvertOpToLLVMPattern<CallMicrokernelOp> {
+  SymbolTable &symbolTable;
+
+  CallMicrokernelOpLowering(SymbolTable &symbolTable,
+                            const LLVMTypeConverter &converter)
+      : ConvertOpToLLVMPattern(converter), symbolTable(symbolTable) {}
+
+  LogicalResult
+  matchAndRewrite(CallMicrokernelOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    LLVM::LLVMFuncOp kernelDecl;
+    {
+      OpBuilder::InsertionGuard guard{rewriter};
+      rewriter.setInsertionPointToEnd(
+          &symbolTable.getOp()->getRegion(0).back());
+
+      SmallVector<Type> types;
+      for (Type type : op.getInputs().getTypes()) {
+        if (auto memRefType = dyn_cast<MemRefType>(type)) {
+          // Pretend layouts don't exit.
+          type = MemRefType::get(
+              memRefType.getShape(), memRefType.getElementType(),
+              /*layout=*/nullptr, memRefType.getMemorySpace());
+        }
+        types.push_back(getTypeConverter()->convertCallingConventionType(
+            type, /*useBarePointerCallConv=*/true));
+      }
+
+      kernelDecl = rewriter.create<LLVM::LLVMFuncOp>(
+          op.getLoc(), op.getName(),
+          LLVM::LLVMFunctionType::get(rewriter.getType<LLVM::LLVMVoidType>(),
+                                      types));
+      symbolTable.insert(kernelDecl);
+
+      // Required to tell the conversion pass to LLVM that this is actually a
+      // call into the same linkage unit, and does not have to be rewritten to a
+      // HAL module call.
+      kernelDecl->setAttr("hal.import.bitcode", rewriter.getUnitAttr());
+
+      cast<QuidditchSnitchDialect>(op->getDialect())
+          ->getRiscvAssemblyAttrHelper()
+          .setAttr(kernelDecl, op.getRiscvAssemblyAttr());
+    }
+
+    SmallVector<Value> inputs;
+    for (auto [value, oldType] :
+         llvm::zip_equal(adaptor.getInputs(), op.getInputs().getType())) {
+      auto memRefType = dyn_cast<MemRefType>(oldType);
+      if (!memRefType) {
+        inputs.push_back(value);
+        continue;
+      }
+      auto descriptor = MemRefDescriptor(value);
+      inputs.push_back(descriptor.bufferPtr(rewriter, op->getLoc(),
+                                            *getTypeConverter(), memRefType));
+    }
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, kernelDecl, inputs);
+    return success();
+  }
+};
 } // namespace
 
 void ConvertSnitchToLLVM::runOnOperation() {
@@ -277,6 +338,7 @@ void ConvertSnitchToLLVM::runOnOperation() {
                                   ArrayRef<Type>{}));
   barrier->setAttr("hal.import.bitcode", builder.getUnitAttr());
 
+  SymbolTable symbolTable(getOperation());
   RewritePatternSet patterns(&getContext());
   patterns.insert<L1MemoryViewOpLowering, CompletedTokenOpLowering>(
       typeConverter);
@@ -284,6 +346,7 @@ void ConvertSnitchToLLVM::runOnOperation() {
   patterns.insert<StartDMATransferOp2DLowering>(dmaStart2D, typeConverter);
   patterns.insert<WaitForDMATransfersOpLowering>(dmaWait, typeConverter);
   patterns.insert<BarrierOpLowering>(barrier, typeConverter);
+  patterns.insert<CallMicrokernelOpLowering>(symbolTable, typeConverter);
 
   LLVMConversionTarget target(getContext());
   target.markUnknownOpDynamicallyLegal([](auto) { return true; });
