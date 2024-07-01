@@ -107,6 +107,7 @@ ConvertToRISCV::convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
   int ret = llvm::sys::ExecuteAndWait(
       xDSLOptPath,
       {xDSLOptPath, "-p",
+       "arith-add-fastmath,"
        "convert-linalg-to-memref-stream,"
        "test-optimise-memref-stream," // NOLINT(*-suspicious-missing-comma)
        "test-lower-memref-stream-to-snitch-stream,"
