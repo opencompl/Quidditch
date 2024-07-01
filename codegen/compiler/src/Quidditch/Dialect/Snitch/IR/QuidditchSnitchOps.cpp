@@ -1,10 +1,17 @@
 #include "QuidditchSnitchOps.h"
 
+#include "llvm/ADT/ScopeExit.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
 
 #include "QuidditchSnitchAttrs.h"
+
+static mlir::ParseResult parseRISCVAssembly(mlir::OpAsmParser &opAsmParser,
+                                            mlir::StringAttr &assembly);
+
+static void printRISCVAssembly(mlir::OpAsmPrinter &opAsmPrinter,
+                               mlir::Operation *, mlir::StringAttr assembly);
 
 #define GET_OP_CLASSES
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.cpp.inc"
@@ -12,6 +19,35 @@
 using namespace mlir;
 using namespace mlir::bufferization;
 using namespace quidditch::Snitch;
+
+static ParseResult parseRISCVAssembly(OpAsmParser &opAsmParser,
+                                      StringAttr &assembly) {
+  std::string result;
+  std::string line;
+  while (succeeded(opAsmParser.parseOptionalString(&line))) {
+    if (!result.empty())
+      result += "\n";
+    result += line;
+  }
+  assembly = StringAttr::get(opAsmParser.getContext(), result);
+  return success();
+}
+
+static void printRISCVAssembly(OpAsmPrinter &opAsmPrinter, Operation *,
+                               StringAttr assembly) {
+  opAsmPrinter.increaseIndent();
+  auto onExit = llvm::make_scope_exit([&] {
+    opAsmPrinter.decreaseIndent();
+    opAsmPrinter.printNewline();
+  });
+
+  SmallVector<StringRef> split;
+  assembly.getValue().split(split, "\n");
+  for (StringRef line : split) {
+    opAsmPrinter.printNewline();
+    opAsmPrinter.printString(line);
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // MemRefMicrokernelOp
@@ -120,6 +156,32 @@ void MemRefMicrokernelOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
   results.insert<RemoveDeadArguments, SinkConstantArguments,
                  ReplaceIdenticalArguments>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// CallMicrokernelOp
+//===----------------------------------------------------------------------===//
+
+bool CallMicrokernelOp::supportsArgumentType(mlir::Type type) {
+  auto memRef = dyn_cast<MemRefType>(type);
+  if (!memRef)
+    return true;
+  if (isa<UnrankedMemRefType>(memRef))
+    return false;
+
+  int64_t offset = 0;
+  SmallVector<int64_t, 4> strides;
+  if (failed(getStridesAndOffset(memRef, strides, offset)))
+    return false;
+
+  return llvm::none_of(strides, ShapedType::isDynamic);
+}
+
+LogicalResult CallMicrokernelOp::verify() {
+  if (!llvm::all_of(getInputs().getTypes(), supportsArgumentType))
+    return emitOpError("do not support functions with signature ")
+           << FunctionType::get(getContext(), getInputs().getTypes(), {});
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

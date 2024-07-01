@@ -34,30 +34,11 @@ private:
 };
 } // namespace
 
-static bool canUseBarepointerCC(Type type) {
-  auto memRef = dyn_cast<MemRefType>(type);
-  if (!memRef)
-    return true;
-  if (isa<UnrankedMemRefType>(memRef))
-    return false;
-
-  int64_t offset = 0;
-  SmallVector<int64_t, 4> strides;
-  if (failed(getStridesAndOffset(memRef, strides, offset)))
-    return false;
-
-  for (int64_t stride : strides)
-    if (ShapedType::isDynamic(stride))
-      return false;
-
-  return !ShapedType::isDynamic(offset);
-}
-
 FailureOr<StringAttr>
 ConvertToRISCV::convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
                                        StringAttr kernelName) {
   if (!llvm::all_of(kernelOp.getBody().getArgumentTypes(),
-                    canUseBarepointerCC)) {
+                    CallMicrokernelOp::supportsArgumentType)) {
     auto emit = assertCompiled ? &MemRefMicrokernelOp::emitError
                                : &MemRefMicrokernelOp::emitWarning;
 
@@ -167,24 +148,10 @@ void ConvertToRISCV::runOnOperation() {
       return WalkResult::interrupt();
     }
 
-    auto builder = OpBuilder::atBlockEnd(module.getBody());
-
-    auto kernelDecl = builder.create<func::FuncOp>(
-        kernelOp.getLoc(), kernelName,
-        builder.getFunctionType(kernelOp.getBody().getArgumentTypes(), {}));
-
-    kernelDecl.setVisibility(SymbolTable::Visibility::Private);
-    // Required to tell the conversion pass to LLVM that this is actually a
-    // call into the same linkage unit, and does not have to be rewritten to a
-    // HAL module call.
-    kernelDecl->setAttr("hal.import.bitcode", UnitAttr::get(&getContext()));
-    kernelDecl->setAttr("llvm.bareptr", UnitAttr::get(&getContext()));
-
-    dialect->getRiscvAssemblyAttrHelper().setAttr(kernelDecl, *riscvAssembly);
-
-    builder.setInsertionPoint(kernelOp);
-    builder.create<func::CallOp>(kernelOp.getLoc(), kernelDecl,
-                                 kernelOp.getInputs());
+    auto builder = OpBuilder(kernelOp);
+    // Assigning names here for deterministic names when lowered.
+    builder.create<CallMicrokernelOp>(kernelOp.getLoc(), kernelName,
+                                      kernelOp.getInputs(), *riscvAssembly);
     kernelOp.erase();
     return WalkResult::advance();
   });
