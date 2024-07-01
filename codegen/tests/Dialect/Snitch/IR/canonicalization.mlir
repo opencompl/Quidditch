@@ -45,3 +45,20 @@ func.func @double_copy(%arg0 : tensor<32xf64>) -> tensor<32xf64> {
   // CHECK-NEXT: return %[[R]]
   return %1 : tensor<32xf64>
 }
+
+
+// CHECK-LABEL: @wait_gets_removed
+func.func @wait_gets_removed() {
+  // CHECK-NEXT: return
+  %0 = quidditch_snitch.completed_token
+  quidditch_snitch.wait_for_dma_transfers %0 : !quidditch_snitch.dma_token
+  return
+}
+
+// CHECK-LABEL: @noop_transfer
+func.func @noop_transfer(%arg0 : memref<?xf32>) -> !quidditch_snitch.dma_token {
+  // CHECK-NEXT: %[[R:.*]] = quidditch_snitch.completed_token
+  // CHECK-NEXT: return %[[R]]
+  %0 = quidditch_snitch.start_dma_transfer from %arg0 : memref<?xf32> to %arg0 : memref<?xf32>
+  return %0 : !quidditch_snitch.dma_token
+}

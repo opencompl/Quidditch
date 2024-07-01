@@ -1,7 +1,6 @@
 #include "QuidditchSnitchOps.h"
 
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
 
@@ -274,5 +273,45 @@ LogicalResult CopyTensorOp::bufferize(RewriterBase &rewriter,
 
   // Replace op.
   replaceOpWithBufferizedValues(rewriter, getOperation(), *alloc);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// StartDMATransferOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StartDMATransferOp::canonicalize(StartDMATransferOp op,
+                                               PatternRewriter &rewriter) {
+  if (op.getSource() != op.getDest())
+    return failure();
+
+  rewriter.replaceOpWithNewOp<CompletedTokenOp>(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// WaitForDMATransfersOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+WaitForDMATransfersOp::fold(FoldAdaptor adaptor,
+                            SmallVectorImpl<OpFoldResult> &results) {
+  bool changed = false;
+  MutableOperandRange tokens = getTokensMutable();
+  for (int i = tokens.size() - 1; i >= 0; i--) {
+    if (tokens[i].get().getDefiningOp<CompletedTokenOp>()) {
+      changed = true;
+      tokens.erase(i);
+    }
+  }
+  return success(changed);
+}
+
+LogicalResult WaitForDMATransfersOp::canonicalize(WaitForDMATransfersOp op,
+                                                  PatternRewriter &rewriter) {
+  if (!op.getTokens().empty())
+    return failure();
+
+  rewriter.eraseOp(op);
   return success();
 }
