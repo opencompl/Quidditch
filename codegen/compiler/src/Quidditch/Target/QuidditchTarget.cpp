@@ -176,6 +176,7 @@ public:
         .addPass(createCSEPass)
         .addPass(createFuseTensorPadWithConsumerPass)
         .addPass(createConcretizePadResultShapePass)
+        .addPass(quidditch::Snitch::createPromoteOperandsToL1Pass)
         .addPass(quidditch::createFormMicrokernelsPass);
 
     BufferizationOptions::AllocationFn allocationFn =
@@ -196,7 +197,7 @@ public:
     FunctionLikeNest(modulePassManager)
         .addPass(createEliminateEmptyTensorsPass)
         .addPass(bufferization::createEmptyTensorToAllocTensorPass)
-        .addPass(quidditch::Snitch::createPromoteToL1Pass)
+        .addPass(quidditch::Snitch::createPromoteAllocsToL1Pass)
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
         .addPass([&] {
