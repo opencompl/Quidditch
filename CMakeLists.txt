@@ -90,6 +90,12 @@ add_test(NAME
 add_test(NAME
     runtime-tests
     COMMAND
-    ${CMAKE_CTEST_COMMAND} --extra-verbose -j${N}
+    ${CMAKE_CTEST_COMMAND} -LE nightly --extra-verbose -j${N}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/runtime
+)
+add_custom_target(test-nightly
+    COMMAND ${CMAKE_CTEST_COMMAND} -L nightly --extra-verbose -j${N}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/runtime
+    DEPENDS runtime
+    USES_TERMINAL
 )
