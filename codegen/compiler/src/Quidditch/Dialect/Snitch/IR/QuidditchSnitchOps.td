@@ -103,6 +103,8 @@ def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer"
   let assemblyFormat = [{
     `from` $source `:` type($source) `to` $dest `:` type($dest) attr-dict
   }];
+
+  let hasCanonicalizeMethod = 1;
 }
 
 def QuidditchSnitch_WaitForDMATransfersOp
@@ -118,6 +120,24 @@ def QuidditchSnitch_WaitForDMATransfersOp
 
   let assemblyFormat = [{
     $tokens `:` type($tokens) attr-dict
+  }];
+
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+}
+
+def QuidditchSnitch_CompletedTokenOp
+  : QuidditchSnitch_Op<"completed_token", [Pure]> {
+
+  let description = [{
+    Op returning a special value representing a completed DMA transfer.
+    Passing this token to `wait_for_dma_transfers` will always return immediately.
+  }];
+
+  let results = (outs QuidditchSnitch_DMATokenType:$token);
+
+  let assemblyFormat = [{
+    attr-dict
   }];
 }
 

@@ -204,6 +204,19 @@ struct WaitForDMATransfersOpLowering
   }
 };
 
+struct CompletedTokenOpLowering : ConvertOpToLLVMPattern<CompletedTokenOp> {
+
+  using ConvertOpToLLVMPattern<CompletedTokenOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(CompletedTokenOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(
+        op, typeConverter->convertType(op.getType()), 0);
+    return success();
+  }
+};
+
 struct BarrierOpLowering : ConvertOpToLLVMPattern<BarrierOp> {
 
   LLVM::LLVMFuncOp barrierFunc;
@@ -265,7 +278,8 @@ void ConvertSnitchToLLVM::runOnOperation() {
   barrier->setAttr("hal.import.bitcode", builder.getUnitAttr());
 
   RewritePatternSet patterns(&getContext());
-  patterns.insert<L1MemoryViewOpLowering>(typeConverter);
+  patterns.insert<L1MemoryViewOpLowering, CompletedTokenOpLowering>(
+      typeConverter);
   patterns.insert<StartDMATransferOp1DLowering>(dmaStart1D, typeConverter);
   patterns.insert<StartDMATransferOp2DLowering>(dmaStart2D, typeConverter);
   patterns.insert<WaitForDMATransfersOpLowering>(dmaWait, typeConverter);
