@@ -26,6 +26,11 @@ macro(test_executable target_name)
       FIXTURES_REQUIRED ${target_name}-fixture
       LABELS ${label}
   )
+  if (_RULE_NIGHTLY)
+    set_tests_properties(${target_name} PROPERTIES
+        TIMEOUT 0
+    )
+  endif ()
 
   add_test(NAME ${target_name}-setup
       COMMAND rm -rf ${CMAKE_CURRENT_BINARY_DIR}/${target_name}.test/*
