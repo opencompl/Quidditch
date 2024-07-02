@@ -257,8 +257,12 @@ struct CallMicrokernelOpLowering : ConvertOpToLLVMPattern<CallMicrokernelOp> {
               memRefType.getShape(), memRefType.getElementType(),
               /*layout=*/nullptr, memRefType.getMemorySpace());
         }
-        types.push_back(getTypeConverter()->convertCallingConventionType(
-            type, /*useBarePointerCallConv=*/true));
+        Type converted = getTypeConverter()->convertCallingConventionType(
+            type, /*useBarePointerCallConv=*/true);
+        if (!converted)
+          return failure();
+
+        types.push_back(converted);
       }
 
       kernelDecl = rewriter.create<LLVM::LLVMFuncOp>(

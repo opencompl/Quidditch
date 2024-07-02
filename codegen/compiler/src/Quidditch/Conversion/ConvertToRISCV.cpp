@@ -34,6 +34,25 @@ private:
 };
 } // namespace
 
+static Type transformType(Type type) {
+  auto memRefType = dyn_cast<MemRefType>(type);
+  if (!memRefType)
+    return type;
+
+  auto strided = dyn_cast_or_null<StridedLayoutAttr>(memRefType.getLayout());
+  if (!strided)
+    return type;
+
+  auto strideReplacement =
+      StridedLayoutAttr::get(type.getContext(), 0, strided.getStrides());
+  if (strideReplacement.isIdentity())
+    return MemRefType::get(memRefType.getShape(), memRefType.getElementType(),
+                           nullptr, memRefType.getMemorySpace());
+
+  return MemRefType::get(memRefType.getShape(), memRefType.getElementType(),
+                         strideReplacement, memRefType.getMemorySpace());
+}
+
 FailureOr<StringAttr>
 ConvertToRISCV::convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
                                        StringAttr kernelName) {
@@ -49,12 +68,18 @@ ConvertToRISCV::convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
     return failure();
   }
 
+  SmallVector<Type> argumentTypes =
+      llvm::map_to_vector(kernelOp.getBody().getArgumentTypes(), transformType);
+
   OpBuilder builder(&getContext());
-  OwningOpRef<func::FuncOp> tempFuncOp = builder.create<func::FuncOp>(
-      kernelOp.getLoc(), kernelName,
-      builder.getFunctionType(kernelOp.getBody().getArgumentTypes(), {}));
+  OwningOpRef<func::FuncOp> tempFuncOp =
+      builder.create<func::FuncOp>(kernelOp.getLoc(), kernelName,
+                                   builder.getFunctionType(argumentTypes, {}));
   IRMapping mapping;
   kernelOp.getBody().cloneInto(&tempFuncOp->getBody(), mapping);
+  for (BlockArgument argument : tempFuncOp->getArguments())
+    argument.setType(transformType(argument.getType()));
+
   builder.setInsertionPointToEnd(&tempFuncOp->getBody().back());
 
   builder.create<func::ReturnOp>(kernelOp.getLoc());
