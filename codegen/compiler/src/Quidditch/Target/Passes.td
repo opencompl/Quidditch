@@ -28,4 +28,19 @@ def ConfigureForSnitchPass
   : InterfacePass<"quidditch-configure-for-snitch",
       "mlir::FunctionOpInterface">;
 
+def TensorTilePass : InterfacePass<"quidditch-tensor-tile",
+  "mlir::FunctionOpInterface"> {
+  let options = [
+    Option<"tilingLevel", "tiling-level", "quidditch::TilingLevel",
+           /*default=*/"quidditch::TilingLevel::Reduction",
+           "Tiling level to tile. Supported levels are 'reduction' and 'thread'",
+           [{llvm::cl::values(
+              clEnumValN(quidditch::TilingLevel::Reduction, "reduction",
+                         "Tile and fuse all annotated ops to serial loops"),
+              clEnumValN(quidditch::TilingLevel::Thread, "thread",
+                         "Tile and fuse all annotated ops to threads")
+           )}]>,
+  ];
+}
+
 #endif

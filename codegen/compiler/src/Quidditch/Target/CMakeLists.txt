@@ -25,6 +25,7 @@ iree_cc_library(
         "DisableQuidditchVariant.cpp"
         "LinkExecutables.cpp"
         "ReluToMax.cpp"
+        "TensorTile.cpp"
         DEPS
         ::PassesIncGen
         Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
