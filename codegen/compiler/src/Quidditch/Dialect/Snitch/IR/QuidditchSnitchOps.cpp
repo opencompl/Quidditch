@@ -219,25 +219,36 @@ bool CopyTensorOp::resultBufferizesToMemoryWrite(
     OpResult opResult, const bufferization::AnalysisState &state) {
   assert(opResult == getResult() && "no other result");
 
+  std::optional<bool> matches =
+      addressSpaceMatches(getTransfersToL1(), getCopy(), state.getOptions());
+  // Conservative answer.
+  if (!matches)
+    return true;
+
   // No copy is performed unless the address space does not match.
   // Copy in this context implies that we are writing to the result.
-  return addressSpaceMatches(getTransfersToL1(), getCopy(), state.getOptions())
-      .value_or(true);
+  return !*matches;
 }
 
 bool CopyTensorOp::bufferizesToMemoryRead(
-    OpOperand &opOperand, const bufferization::AnalysisState &) {
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
   assert(opOperand == getCopyMutable() && "have only one operand");
 
-  // We read from the buffer we are copying.
-  return true;
+  std::optional<bool> matches =
+      addressSpaceMatches(getTransfersToL1(), getCopy(), state.getOptions());
+  // Conservative answer.
+  if (!matches)
+    return true;
+
+  // We only read from the buffer if we are copying.
+  return !*matches;
 }
 
 bool CopyTensorOp::bufferizesToMemoryWrite(
     OpOperand &opOperand, const bufferization::AnalysisState &) {
   assert(opOperand == getCopyMutable() && "have only one operand");
 
-  // We do not write into the buffer we are copying.
+  // We do not write into the buffer we are copying ever.
   return false;
 }
 
@@ -254,8 +265,9 @@ CopyTensorOp::getAliasingValues(OpOperand &opOperand,
 
   // Always a brand-new allocation unless the address space matches and we elide
   // the copy, in which case operand and result alias.
-  if (!*matches)
-    return {{getResult(), BufferRelation::Equivalent}};
+  if (*matches)
+    return {{getResult(), BufferRelation::Equivalent, /*isDefinite=*/true}};
+
   return {};
 }
 
