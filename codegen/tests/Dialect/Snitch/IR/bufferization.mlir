@@ -32,3 +32,21 @@ func.func @copy_l1_buffer_alloca_elided() -> tensor<32xf32> {
   // CHECK: return
   return %r2 : tensor<32xf32>
 }
+
+// CHECK: func @scf_for_copy_l1_buffer(
+func.func @scf_for_copy_l1_buffer() -> tensor<32xf32> {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  // CHECK: %[[MEMREF:.*]] = memref.alloc
+  %r = bufferization.alloc_tensor() {memory_space = #quidditch_snitch.l1_encoding} : tensor<32xf32>
+  %r2 = quidditch_snitch.copy_tensor %r to L1 : tensor<32xf32>
+  // CHECK-NEXT: %[[R:.*]] = scf.for
+  // CHECK-SAME: iter_args(%[[ITER:.*]] = %[[MEMREF]])
+  // CHECK-NEXT: scf.yield %[[ITER]]
+  // CHECK: bufferization.to_tensor %[[R]]
+  %r3 = scf.for %i = %c0 to %c1 step %c1 iter_args(%iter = %r2) -> (tensor<32xf32>) {
+    %r4 = quidditch_snitch.copy_tensor %iter to L1 : tensor<32xf32>
+    scf.yield %r4 : tensor<32xf32>
+  }
+  return %r3 : tensor<32xf32>
+}
