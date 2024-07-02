@@ -31,20 +31,26 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
                                    Operation *rootOp) {
   return TypeSwitch<Operation *, LogicalResult>(rootOp)
       .Case<linalg::MatmulTransposeBOp>([&](linalg::LinalgOp op) {
+        // [0]: Always one in our matvec case.
+
+        // [1]: How many rows we are processing. Should fit in L1.
+        // Should be as high as possible for subgroup distribution.
+        // Should be a multiple of 8 to be further distributed to compute cores.
+
+        // [2]: Reduction dimension (0 to 161). How many columns are we
+        // processing at once? Cannot be distributed but has a few effects:
+        // * It allows us to make [1] larger by fitting more rows into L1.
+        //   This therefore also gives us more parallelism compute core wise.
+        // * It makes our workgroups larger, reducing dispatch overhead and
+        //   memory bandwidth (by only needing to copy loop invariant memory
+        //   once + needing to copy back the result fewer times). This could
+        //   come at the cost of concurrency for distributing workgroups but is
+        //   only applicable once on Occamy.
+        SmallVector<int64_t> bounds(3, 0);
+
         if (funcOp.getName() ==
             "main$async_dispatch_0_matmul_transpose_b_1x400x161_f64") {
-          SmallVector<int64_t> bounds(3, 0);
-          // Future subgroup distribution.
-          bounds[0] = 1;
-          // How many rows we are processing (0 to 400). Should fit in L1.
-          // Should be as high as possible for subgroup distribution.
-          // (Could almost be 40).
-          bounds[1] = 50;
-
-          // Reduction dimension (0 to 161). How many columns are we processing
-          // at once?
-          // Cannot be distributed. As wide as possible for FPU utilization of a
-          // single core.
+          bounds[1] = 40;
           bounds[2] = 0;
 
           TileSizesListType tileSizes = {bounds};
@@ -54,18 +60,8 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
         }
         if (funcOp.getName() ==
             "main$async_dispatch_7_matmul_transpose_b_1x600x400_f64") {
-          SmallVector<int64_t> bounds(3, 0);
-          // Future subgroup distribution.
-          bounds[0] = 1;
-          // How many rows we are processing (0 to 600). Should fit in L1.
-          // Should be as high as possible for subgroup distribution.
-          // (Could almost be 40).
-          bounds[1] = 25;
-
-          // Reduction dimension (0 to 400). How many columns are we processing
-          // at once?
-          // Cannot be distributed. As wide as possible for FPU utilization of a
-          // single core.
+          bounds[0] = 0;
+          bounds[1] = 24;
           bounds[2] = 0;
 
           TileSizesListType tileSizes = {bounds};
@@ -75,18 +71,9 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
         }
         if (funcOp.getName() ==
             "main$async_dispatch_8_matmul_transpose_b_1x600x600_f64") {
-          SmallVector<int64_t> bounds(3, 0);
-          // Future subgroup distribution.
-          bounds[0] = 1;
-          // How many rows we are processing (0 to 600). Should fit in L1.
-          // Should be as high as possible for subgroup distribution.
-          bounds[1] = 15;
-
-          // Reduction dimension (0 to 600). How many columns are we processing
-          // at once?
-          // Cannot be distributed. As wide as possible for FPU utilization of a
-          // single core.
-          bounds[2] = 0;
+          bounds[0] = 0;
+          bounds[1] = 40;
+          bounds[2] = 300;
 
           TileSizesListType tileSizes = {bounds};
           return setOpConfigAndEntryPointFnTranslation(
@@ -95,16 +82,9 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
         }
         if (funcOp.getName() ==
             "main$async_dispatch_1_matmul_transpose_b_1x1200x400_f64") {
-          SmallVector<int64_t> bounds(3, 0);
           // Future subgroup distribution.
           bounds[0] = 0;
-          // How many rows we are processing (0 to 1200). Should fit in L1.
-          // Should be as high as possible for subgroup distribution.
-          bounds[1] = 25;
-          // Reduction dimension (0 to 400). How many columns we are processing
-          // at once?
-          // Cannot be distributed. As wide as possible for FPU utilization of a
-          // single core.
+          bounds[1] = 24;
           bounds[2] = 0;
 
           TileSizesListType tileSizes = {bounds};
