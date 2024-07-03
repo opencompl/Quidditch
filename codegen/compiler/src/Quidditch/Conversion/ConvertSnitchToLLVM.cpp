@@ -219,16 +219,19 @@ struct CompletedTokenOpLowering : ConvertOpToLLVMPattern<CompletedTokenOp> {
 
 struct BarrierOpLowering : ConvertOpToLLVMPattern<BarrierOp> {
 
-  LLVM::LLVMFuncOp barrierFunc;
-
-  BarrierOpLowering(LLVM::LLVMFuncOp barrierFunc,
-                    const LLVMTypeConverter &converter)
-      : ConvertOpToLLVMPattern(converter), barrierFunc(barrierFunc) {}
+  using ConvertOpToLLVMPattern<BarrierOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
   matchAndRewrite(BarrierOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, barrierFunc, ValueRange());
+    // Effectively clobbers all memory by being synchronization point
+    // (kind of like atomics).
+    rewriter.replaceOpWithNewOp<LLVM::InlineAsmOp>(
+        op, /*res=*/TypeRange(),
+        /*operands=*/ValueRange(), "csrr x0, 0x7C2",
+        /*constraints=*/"~{memory}",
+        /*has_side_effects=*/true, /*is_align_stack=*/false,
+        /*asm_dialect=*/nullptr, /*operand_attrs=*/nullptr);
     return success();
   }
 };
@@ -354,12 +357,6 @@ void ConvertSnitchToLLVM::runOnOperation() {
                                   ArrayRef<Type>{}));
   dmaWait->setAttr("hal.import.bitcode", builder.getUnitAttr());
 
-  auto barrier = builder.create<LLVM::LLVMFuncOp>(
-      builder.getUnknownLoc(), "snrt_cluster_hw_barrier",
-      LLVM::LLVMFunctionType::get(builder.getType<LLVM::LLVMVoidType>(),
-                                  ArrayRef<Type>{}));
-  barrier->setAttr("hal.import.bitcode", builder.getUnitAttr());
-
   auto clusterCoreIndex = builder.create<LLVM::LLVMFuncOp>(
       builder.getUnknownLoc(), "snrt_cluster_core_idx",
       LLVM::LLVMFunctionType::get(i32, ArrayRef<Type>{}));
@@ -367,12 +364,11 @@ void ConvertSnitchToLLVM::runOnOperation() {
 
   SymbolTable symbolTable(getOperation());
   RewritePatternSet patterns(&getContext());
-  patterns.insert<L1MemoryViewOpLowering, CompletedTokenOpLowering>(
-      typeConverter);
+  patterns.insert<L1MemoryViewOpLowering, CompletedTokenOpLowering,
+                  BarrierOpLowering>(typeConverter);
   patterns.insert<StartDMATransferOp1DLowering>(dmaStart1D, typeConverter);
   patterns.insert<StartDMATransferOp2DLowering>(dmaStart2D, typeConverter);
   patterns.insert<WaitForDMATransfersOpLowering>(dmaWait, typeConverter);
-  patterns.insert<BarrierOpLowering>(barrier, typeConverter);
   patterns.insert<ClusterIndexOpLowering>(clusterCoreIndex, typeConverter);
   patterns.insert<CallMicrokernelOpLowering>(symbolTable, typeConverter);
 
