@@ -34,30 +34,30 @@ private:
 };
 } // namespace
 
-static bool canUseBarepointerCC(Type type) {
-  auto memRef = dyn_cast<MemRefType>(type);
-  if (!memRef)
-    return true;
-  if (isa<UnrankedMemRefType>(memRef))
-    return false;
+static Type transformType(Type type) {
+  auto memRefType = dyn_cast<MemRefType>(type);
+  if (!memRefType)
+    return type;
 
-  int64_t offset = 0;
-  SmallVector<int64_t, 4> strides;
-  if (failed(getStridesAndOffset(memRef, strides, offset)))
-    return false;
+  auto strided = dyn_cast_or_null<StridedLayoutAttr>(memRefType.getLayout());
+  if (!strided)
+    return type;
 
-  for (int64_t stride : strides)
-    if (ShapedType::isDynamic(stride))
-      return false;
+  auto strideReplacement =
+      StridedLayoutAttr::get(type.getContext(), 0, strided.getStrides());
+  if (strideReplacement.isIdentity())
+    return MemRefType::get(memRefType.getShape(), memRefType.getElementType(),
+                           nullptr, memRefType.getMemorySpace());
 
-  return !ShapedType::isDynamic(offset);
+  return MemRefType::get(memRefType.getShape(), memRefType.getElementType(),
+                         strideReplacement, memRefType.getMemorySpace());
 }
 
 FailureOr<StringAttr>
 ConvertToRISCV::convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
                                        StringAttr kernelName) {
   if (!llvm::all_of(kernelOp.getBody().getArgumentTypes(),
-                    canUseBarepointerCC)) {
+                    CallMicrokernelOp::supportsArgumentType)) {
     auto emit = assertCompiled ? &MemRefMicrokernelOp::emitError
                                : &MemRefMicrokernelOp::emitWarning;
 
@@ -68,20 +68,21 @@ ConvertToRISCV::convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
     return failure();
   }
 
+  SmallVector<Type> argumentTypes =
+      llvm::map_to_vector(kernelOp.getBody().getArgumentTypes(), transformType);
+
   OpBuilder builder(&getContext());
-  OwningOpRef<func::FuncOp> tempFuncOp = builder.create<func::FuncOp>(
-      kernelOp.getLoc(), kernelName,
-      builder.getFunctionType(kernelOp.getBody().getArgumentTypes(),
-                              kernelOp.getResultTypes()));
+  OwningOpRef<func::FuncOp> tempFuncOp =
+      builder.create<func::FuncOp>(kernelOp.getLoc(), kernelName,
+                                   builder.getFunctionType(argumentTypes, {}));
   IRMapping mapping;
   kernelOp.getBody().cloneInto(&tempFuncOp->getBody(), mapping);
-  builder.setInsertionPointToEnd(&tempFuncOp->getBody().back());
-  tempFuncOp->getBody().back().getTerminator()->erase();
+  for (BlockArgument argument : tempFuncOp->getArguments())
+    argument.setType(transformType(argument.getType()));
 
-  SmallVector<Value> returns;
-  for (Value value : kernelOp.getYieldOp().getResults())
-    returns.push_back(mapping.lookupOrDefault(value));
-  builder.create<func::ReturnOp>(kernelOp.getLoc(), returns);
+  builder.setInsertionPointToEnd(&tempFuncOp->getBody().back());
+
+  builder.create<func::ReturnOp>(kernelOp.getLoc());
 
   SmallString<64> stdinFile;
   int stdinFd;
@@ -112,6 +113,7 @@ ConvertToRISCV::convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
   int ret = llvm::sys::ExecuteAndWait(
       xDSLOptPath,
       {xDSLOptPath, "-p",
+       "arith-add-fastmath,"
        "convert-linalg-to-memref-stream,"
        "test-optimise-memref-stream," // NOLINT(*-suspicious-missing-comma)
        "test-lower-memref-stream-to-snitch-stream,"
@@ -171,26 +173,10 @@ void ConvertToRISCV::runOnOperation() {
       return WalkResult::interrupt();
     }
 
-    auto builder = OpBuilder::atBlockEnd(module.getBody());
-
-    auto kernelDecl = builder.create<func::FuncOp>(
-        kernelOp.getLoc(), kernelName,
-        builder.getFunctionType(kernelOp.getBody().getArgumentTypes(),
-                                kernelOp.getResultTypes()));
-
-    kernelDecl.setVisibility(SymbolTable::Visibility::Private);
-    // Required to tell the conversion pass to LLVM that this is actually a
-    // call into the same linkage unit, and does not have to be rewritten to a
-    // HAL module call.
-    kernelDecl->setAttr("hal.import.bitcode", UnitAttr::get(&getContext()));
-    kernelDecl->setAttr("llvm.bareptr", UnitAttr::get(&getContext()));
-
-    dialect->getRiscvAssemblyAttrHelper().setAttr(kernelDecl, *riscvAssembly);
-
-    builder.setInsertionPoint(kernelOp);
-    auto callOp = builder.create<func::CallOp>(kernelOp.getLoc(), kernelDecl,
-                                               kernelOp.getInputs());
-    kernelOp.replaceAllUsesWith(callOp);
+    auto builder = OpBuilder(kernelOp);
+    // Assigning names here for deterministic names when lowered.
+    builder.create<CallMicrokernelOp>(kernelOp.getLoc(), kernelName,
+                                      kernelOp.getInputs(), *riscvAssembly);
     kernelOp.erase();
     return WalkResult::advance();
   });

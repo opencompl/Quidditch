@@ -6,6 +6,7 @@
 #include "iree/compiler/Codegen/Common/CPU/Passes.h"
 #include "iree/compiler/Codegen/Common/Passes.h"
 #include "iree/compiler/Codegen/LLVMCPU/Passes.h"
+#include "iree/compiler/Codegen/Transforms/Transforms.h"
 #include "iree/compiler/Dialect/HAL/Target/TargetRegistry.h"
 #include "iree/compiler/Dialect/LinalgExt/Transforms/Passes.h"
 #include "mlir/Conversion/ComplexToStandard/ComplexToStandard.h"
@@ -17,6 +18,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
+#include "mlir/Dialect/SCF/Transforms/Passes.h"
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
@@ -144,6 +146,8 @@ public:
                 StringAttr::get(context, "e-m:e-p:32:32-i64:64-n32-S128"));
     list.append("target_triple",
                 StringAttr::get(context, "riscv32-unknown-elf"));
+    list.append("compute_cores",
+                IntegerAttr::get(IntegerType::get(context, 32), 8));
     executableTargetAttrs.push_back(IREE::HAL::ExecutableTargetAttr::get(
         context, StringAttr::get(context, "quidditch"),
         StringAttr::get(context, "static"), list.getDictionary(context)));
@@ -172,11 +176,23 @@ public:
         .addPass([] { return createTileAndDistributeToWorkgroupsPass(); })
         .addPass([] { return createConvertToDestinationPassingStylePass(); })
         .addPass(createFoldAffineMinInDistributedLoopsPass)
+        .addPass(createRemoveSingleIterationLoopPass)
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
         .addPass(createFuseTensorPadWithConsumerPass)
         .addPass(createConcretizePadResultShapePass)
-        .addPass(quidditch::createFormMicrokernelsPass);
+        .addPass([] {
+          return quidditch::createTensorTilePass(
+              {quidditch::TilingLevel::Reduction});
+        })
+        .addPass(createCanonicalizerPass)
+        .addPass(createCSEPass)
+        .addPass(quidditch::Snitch::createPromoteOperandsToL1Pass)
+        // TODO: Fuse scf.forall after.
+        .addPass([] {
+          return quidditch::createTensorTilePass(
+              {quidditch::TilingLevel::Thread});
+        });
 
     BufferizationOptions::AllocationFn allocationFn =
         [](OpBuilder &builder, Location loc, MemRefType memRefType,
@@ -196,7 +212,7 @@ public:
     FunctionLikeNest(modulePassManager)
         .addPass(createEliminateEmptyTensorsPass)
         .addPass(bufferization::createEmptyTensorToAllocTensorPass)
-        .addPass(quidditch::Snitch::createPromoteToL1Pass)
+        .addPass(quidditch::Snitch::createPromoteAllocsToL1Pass)
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
         .addPass([&] {
@@ -204,9 +220,10 @@ public:
         });
     addIREEPostBufferizationPasses(modulePassManager.nest<func::FuncOp>());
 
-    // TODO: Remove the following pass and plumb support for
-    // #hal.descriptor_type memory space through the stack.
     FunctionLikeNest(modulePassManager)
+        .addPass(quidditch::Snitch::createLowerForallOpPass)
+        // TODO: Remove the following pass and plumb support for
+        // #hal.descriptor_type memory space through the stack.
         .addPass(createEraseHALDescriptorTypeFromMemRefPass)
         .addPass([&] {
           return quidditch::Snitch::createLowerL1AllocationsPass(
@@ -214,7 +231,11 @@ public:
         })
         .addPass(quidditch::createReluToMaxPass)
         .addPass(createCanonicalizerPass)
-        .addPass(createLinalgGeneralizeNamedOpsPass);
+        .addPass(createCSEPass)
+        .addPass(createLoopInvariantCodeMotionPass)
+        .addPass(createLinalgGeneralizeNamedOpsPass)
+        .addPass(createRemoveSingleIterationLoopPass)
+        .addPass(quidditch::Snitch::createFormMicrokernelsPass);
 
     modulePassManager.addPass(quidditch::Snitch::createSpecializeDMACodePass());
     FunctionLikeNest(modulePassManager)
@@ -335,33 +356,37 @@ public:
       return nullptr;
     }
 
+    auto *dialect =
+        module.getContext()->getLoadedDialect<QuidditchSnitchDialect>();
+
+    SymbolTable symbolTable(module);
     Quidditch::LibraryBuilder libraryBuilder(
         llvmModule.get(), Quidditch::LibraryBuilder::Mode::NONE,
         Quidditch::LibraryBuilder::Version::LATEST);
     auto align16 = llvm::Attribute::getWithAlignment(context, llvm::Align(16));
     for (auto exportOp :
          variantOp.getBlock().getOps<IREE::HAL::ExecutableExportOp>()) {
-      llvm::Function *dmaPointer = nullptr;
       // Find the matching function in the LLVM module.
-      auto *llvmFunc =
-          llvmModule->getFunction((exportOp.getName() + "$iree_to_xdsl").str());
-      if (!llvmFunc) {
-        // LLVMCPU kernel rather than xDSL.
-        llvmFunc = llvmModule->getFunction(exportOp.getName());
-      } else {
-        // xDSL kernel.
-
-        // TODO: This should use the attribute attached to the LLVM::LLVMFuncOp.
-        dmaPointer =
-            llvmModule->getFunction((llvmFunc->getName() + "$dma").str());
-        if (!dmaPointer) {
-          module.emitError()
-              << "failed to find DMA code for " << exportOp.getName();
-          return nullptr;
-        }
-      }
+      auto *llvmFunc = llvmModule->getFunction((exportOp.getName()).str());
       if (!llvmFunc)
         continue;
+
+      llvm::Function *dmaPointer = nullptr;
+      if (Operation *mlirFunc = symbolTable.lookup(exportOp.getName())) {
+        if (FlatSymbolRefAttr dmaFunc =
+                dialect->getDmaSpecializationAttrHelper().getAttr(mlirFunc)) {
+          dmaPointer = llvmModule->getFunction(dmaFunc.getValue());
+          if (!dmaPointer) {
+            module.emitError()
+                << "failed to find DMA code for " << exportOp.getName();
+            return nullptr;
+          }
+          dmaPointer->setLinkage(
+              llvm::GlobalValue::LinkageTypes::InternalLinkage);
+          // Name suffix recognized by tooling for xDSL generated kernels.
+          llvmFunc->setName(llvmFunc->getName() + "$iree_to_xdsl");
+        }
+      }
 
       llvmFunc->setLinkage(llvm::GlobalValue::LinkageTypes::InternalLinkage);
       llvmFunc->setDSOLocal(true);

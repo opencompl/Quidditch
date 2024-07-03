@@ -1,62 +1,39 @@
 // RUN: quidditch-opt %s --canonicalize --split-input-file --allow-unregistered-dialect | FileCheck %s
 
-// CHECK-LABEL: @dead_result
-func.func @dead_result() {
-  // CHECK: quidditch_snitch.memref.microkernel() : () -> ()
-  %0 = quidditch_snitch.memref.microkernel() : () -> i32 {
-    %c = arith.constant 1 : i32
-    quidditch_snitch.microkernel_yield %c : i32
-  }
-  return
-}
-
 // CHECK-LABEL: @sink_constants
-func.func @sink_constants() -> i32 {
+func.func @sink_constants() {
   %c = arith.constant 1 : i32
-  // CHECK: quidditch_snitch.memref.microkernel() : () -> i32
-  %0 = quidditch_snitch.memref.microkernel(%c) : (i32) -> i32 {
+  // CHECK: quidditch_snitch.memref.microkernel()
+  quidditch_snitch.memref.microkernel(%c) : i32 {
   ^bb0(%arg0 : i32):
     // CHECK-NEXT: %[[C:.*]] = arith.constant
     // CHECK-NEXT: "test.transform"(%[[C]])
-    %1 = "test.transform"(%arg0) : (i32) -> i32
-    quidditch_snitch.microkernel_yield %1 : i32
+    "test.transform"(%arg0) : (i32) -> ()
   }
-  return %0 : i32
-}
-
-// CHECK-LABEL: @invariant_result
-// CHECK-SAME: %[[ARG0:[[:alnum:]]+]]
-func.func @invariant_result(%arg0 : i32) -> i32 {
-  %0 = quidditch_snitch.memref.microkernel(%arg0) : (i32) -> i32 {
-  ^bb0(%arg1 : i32):
-    quidditch_snitch.microkernel_yield %arg1 : i32
-  }
-  // CHECK: return %[[ARG0]]
-  return %0 : i32
+  return
 }
 
 // CHECK-LABEL: @dead_argument
 // CHECK-SAME: %[[ARG0:[[:alnum:]]+]]
 func.func @dead_argument(%arg0 : i32) {
   // CHECK: quidditch_snitch.memref.microkernel()
-  quidditch_snitch.memref.microkernel(%arg0) : (i32) -> () {
+  quidditch_snitch.memref.microkernel(%arg0) : i32 {
   ^bb0(%arg1 : i32):
-    quidditch_snitch.microkernel_yield
+
   }
   return
 }
 
 // CHECK-LABEL: @identical_argument
 // CHECK-SAME: %[[ARG0:[[:alnum:]]+]]
-func.func @identical_argument(%arg0 : i32) -> i32 {
+func.func @identical_argument(%arg0 : i32) {
   // CHECK: quidditch_snitch.memref.microkernel(%[[ARG0]])
-  %0 = quidditch_snitch.memref.microkernel(%arg0, %arg0) : (i32, i32) -> i32 {
+  quidditch_snitch.memref.microkernel(%arg0, %arg0) : i32, i32 {
   ^bb0(%arg1 : i32, %arg2 : i32):
     // CHECK: "test.transform"(%[[ARG1:.*]], %[[ARG1]])
-    %1 = "test.transform"(%arg1, %arg2) : (i32, i32) -> i32
-    quidditch_snitch.microkernel_yield %1 : i32
+    "test.transform"(%arg1, %arg2) : (i32, i32) -> ()
   }
-  return %0 : i32
+  return
 }
 
 // CHECK-LABEL: @double_copy
@@ -67,4 +44,21 @@ func.func @double_copy(%arg0 : tensor<32xf64>) -> tensor<32xf64> {
   %1 = quidditch_snitch.copy_tensor %0 to L1 : tensor<32xf64>
   // CHECK-NEXT: return %[[R]]
   return %1 : tensor<32xf64>
+}
+
+
+// CHECK-LABEL: @wait_gets_removed
+func.func @wait_gets_removed() {
+  // CHECK-NEXT: return
+  %0 = quidditch_snitch.completed_token
+  quidditch_snitch.wait_for_dma_transfers %0 : !quidditch_snitch.dma_token
+  return
+}
+
+// CHECK-LABEL: @noop_transfer
+func.func @noop_transfer(%arg0 : memref<?xf32>) -> !quidditch_snitch.dma_token {
+  // CHECK-NEXT: %[[R:.*]] = quidditch_snitch.completed_token
+  // CHECK-NEXT: return %[[R]]
+  %0 = quidditch_snitch.start_dma_transfer from %arg0 : memref<?xf32> to %arg0 : memref<?xf32>
+  return %0 : !quidditch_snitch.dma_token
 }

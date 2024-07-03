@@ -69,9 +69,9 @@ int quidditch_dispatch_enter_worker_loop() {
                          workgroupState))
       error = true;
 
-    // Required to make sure that we only read the mcycle once the FPU has
-    // actually finished. Otherwise, we are measuring cycles that are too short!
-    // This is only required for measurement, not in real programs.
+    // Required to make sure that we any memory side effects from the FPU
+    // sequence have finished at this point before signaling the kernel
+    // execution as being done.
     snrt_fpu_fence();
     read_csr(mcycle);
 
@@ -94,6 +94,19 @@ void quidditch_dispatch_queue_workgroup(
   if (nextCoreToUse != snrt_cluster_compute_core_num()) return;
 
   quidditch_dispatch_execute_workgroups();
+}
+
+void quidditch_dispatch_queue_subgroups(
+    const iree_hal_executable_workgroup_state_v0_t* workgroup_state) {
+  // TODO: This is unnecessarily complicated for the subgroup distribution that
+  // we want to perform.
+  for (iree_hal_executable_workgroup_state_v0_t* iter =
+           configuredWorkgroupState;
+       iter !=
+       configuredWorkgroupState + IREE_ARRAYSIZE(configuredWorkgroupState);
+       iter++)
+    *iter = *workgroup_state;
+  quidditch_dispatch_start_executing_workgroup();
 }
 
 void quidditch_dispatch_execute_workgroups() {

@@ -3,13 +3,6 @@
 
 include "mlir/Pass/PassBase.td"
 
-def FormMicrokernelsPass
-  : InterfacePass<"quidditch-form-microkernels", "mlir::FunctionOpInterface"> {
-  let dependentDialects = [
-    "quidditch::Snitch::QuidditchSnitchDialect",
-  ];
-}
-
 def LinkExecutablesPass : Pass<"quidditch-link-executables", "mlir::ModuleOp"> {
   let description = [{
     Combines all `hal.executable.variant`s of the same target into a single
@@ -34,5 +27,20 @@ def ReluToMaxPass : Pass<"quidditch-relu-to-max">;
 def ConfigureForSnitchPass
   : InterfacePass<"quidditch-configure-for-snitch",
       "mlir::FunctionOpInterface">;
+
+def TensorTilePass : InterfacePass<"quidditch-tensor-tile",
+  "mlir::FunctionOpInterface"> {
+  let options = [
+    Option<"tilingLevel", "tiling-level", "quidditch::TilingLevel",
+           /*default=*/"quidditch::TilingLevel::Reduction",
+           "Tiling level to tile. Supported levels are 'reduction' and 'thread'",
+           [{llvm::cl::values(
+              clEnumValN(quidditch::TilingLevel::Reduction, "reduction",
+                         "Tile and fuse all annotated ops to serial loops"),
+              clEnumValN(quidditch::TilingLevel::Thread, "thread",
+                         "Tile and fuse all annotated ops to threads")
+           )}]>,
+  ];
+}
 
 #endif

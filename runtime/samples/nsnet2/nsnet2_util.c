@@ -14,10 +14,10 @@ int run_nsnet2_experiment(
     iree_hal_executable_library_query_fn_t implementation) {
   if (!snrt_is_dm_core()) return quidditch_dispatch_enter_worker_loop();
 
-  double data[161];
+  double(*data)[161] = malloc(161 * sizeof(double));
 
-  for (int i = 0; i < IREE_ARRAYSIZE(data); i++) {
-    data[i] = (i + 1);
+  for (int i = 0; i < IREE_ARRAYSIZE(*data); i++) {
+    (*data)[i] = (i + 1);
   }
 
   model_config_t config = {
@@ -30,22 +30,21 @@ int run_nsnet2_experiment(
 
       .num_inputs = 1,
       .input_data = (const void *[]){data, data},
-      .input_sizes = (const iree_host_size_t[]){IREE_ARRAYSIZE(data)},
+      .input_sizes = (const iree_host_size_t[]){IREE_ARRAYSIZE(*data)},
       .input_ranks = (const iree_host_size_t[]){3},
       .input_shapes = (const iree_hal_dim_t *[]){(iree_hal_dim_t[]){1, 1, 161}},
 
       .num_outputs = 1,
       .output_data = (void *[]){data},
-      .output_sizes = (const iree_host_size_t[]){IREE_ARRAYSIZE(data)},
+      .output_sizes = (const iree_host_size_t[]){IREE_ARRAYSIZE(*data)},
   };
 
   IREE_CHECK_OK(run_model(&config));
 
-  if (!snrt_is_dm_core()) return 0;
-
-  for (int i = 0; i < IREE_ARRAYSIZE(data); i++) {
-    double value = data[i];
+  for (int i = 0; i < IREE_ARRAYSIZE(*data); i++) {
+    double value = (*data)[i];
     printf("%f\n", value);
   }
+  free(data);
   return 0;
 }

@@ -6,56 +6,15 @@ include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchTypes.td"
 include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
-include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 class QuidditchSnitch_Op<string mnemonic, list<Trait> traits = []> :
   Op<QuidditchSnitch_Dialect, mnemonic, traits>;
 
-def QuidditchSnitch_TensorMicrokernelOp : QuidditchSnitch_Op<"tensor.microkernel",
-  [SingleBlock, NoRegionArguments,
-   DeclareOpInterfaceMethods<RegionBranchOpInterface, [
-    "getRegionInvocationBounds"]>,
-   DeclareOpInterfaceMethods<BufferizableOpInterface, ["bufferize",
-    "getAliasingOpOperands", "getBufferType"]>]> {
-
-  let description = [{
-
-  }];
-
-  let results = (outs Variadic<AnyType>:$results);
-
-  let regions = (region SizedRegion<1>:$body);
-
-  let assemblyFormat = [{
-    (`->` type($results)^ )? $body attr-dict
-  }];
-
-  let extraClassDeclaration = [{
-    MicrokernelYieldOp getYieldOp() {
-      return llvm::cast<MicrokernelYieldOp>(getBody().back().getTerminator());
-    }
-  }];
-}
-
-def QuidditchSnitch_MicrokernelYieldOp
-  : QuidditchSnitch_Op<"microkernel_yield", [Pure, Terminator,
-    ParentOneOf<["TensorMicrokernelOp", "MemRefMicrokernelOp"]>, ReturnLike,
-    DeclareOpInterfaceMethods<BufferizableOpInterface,
-      ["bufferize", "bufferizesToMemoryRead", "bufferizesToMemoryWrite",
-       "getAliasingValues", "mustBufferizeInPlace"]>]> {
-  let arguments = (ins Variadic<AnyType>:$results);
-
-  let assemblyFormat = [{
-    $results (`:` type($results)^)? attr-dict
-  }];
-}
-
 def QuidditchSnitch_MemRefMicrokernelOp
   : QuidditchSnitch_Op<"memref.microkernel", [IsolatedFromAbove, SingleBlock,
-      DeclareOpInterfaceMethods<RegionBranchOpInterface,
-        ["getEntrySuccessorOperands", "getRegionInvocationBounds"]>]> {
+      NoTerminator]> {
 
   let description = [{
 
@@ -63,22 +22,39 @@ def QuidditchSnitch_MemRefMicrokernelOp
 
   let arguments = (ins Variadic<AnyType>:$inputs);
 
-  let results = (outs Variadic<AnyType>:$results);
-
   let regions = (region SizedRegion<1>:$body);
 
   let assemblyFormat = [{
-    `` `(` $inputs `)` `:` functional-type($inputs, $results) $body attr-dict
+    `` `(` $inputs `)` (`:` type($inputs)^)? $body attr-dict
   }];
 
   let hasVerifier = 1;
   let hasCanonicalizer = 1;
 
   let extraClassDeclaration = [{
-
-    MicrokernelYieldOp getYieldOp();
-
     mlir::Block* createEntryBlock();
+  }];
+}
+
+def QuidditchSnitch_CallMicrokernelOp
+  : QuidditchSnitch_Op<"call_microkernel"> {
+
+  let description = [{
+
+  }];
+
+  let arguments = (ins StrAttr:$name, Variadic<AnyType>:$inputs, StrAttr:$riscv_assembly);
+
+  let assemblyFormat = [{
+    $name `(` $inputs `)` (`:` type($inputs)^)? `[``{`
+    custom<RISCVAssembly>($riscv_assembly)
+    `}` `]` attr-dict
+  }];
+
+  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    static bool supportsArgumentType(mlir::Type type);
   }];
 }
 
@@ -149,6 +125,8 @@ def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer"
   let assemblyFormat = [{
     `from` $source `:` type($source) `to` $dest `:` type($dest) attr-dict
   }];
+
+  let hasCanonicalizeMethod = 1;
 }
 
 def QuidditchSnitch_WaitForDMATransfersOp
@@ -165,9 +143,37 @@ def QuidditchSnitch_WaitForDMATransfersOp
   let assemblyFormat = [{
     $tokens `:` type($tokens) attr-dict
   }];
+
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+}
+
+def QuidditchSnitch_CompletedTokenOp
+  : QuidditchSnitch_Op<"completed_token", [Pure]> {
+
+  let description = [{
+    Op returning a special value representing a completed DMA transfer.
+    Passing this token to `wait_for_dma_transfers` will always return immediately.
+  }];
+
+  let results = (outs QuidditchSnitch_DMATokenType:$token);
+
+  let assemblyFormat = [{
+    attr-dict
+  }];
 }
 
 def QuidditchSnitch_BarrierOp : QuidditchSnitch_Op<"barrier"> {
+  let assemblyFormat = [{
+    attr-dict
+  }];
+}
+
+def QuidditchSnitch_ClusterIndexOp
+  : QuidditchSnitch_Op<"cluster_index", [Pure]> {
+
+  let results = (outs Index:$result);
+
   let assemblyFormat = [{
     attr-dict
   }];

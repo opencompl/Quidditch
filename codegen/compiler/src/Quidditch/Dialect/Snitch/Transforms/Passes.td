@@ -3,11 +3,31 @@
 
 include "mlir/Pass/PassBase.td"
 
-def PromoteToL1Pass : Pass<"quidditch-promote-to-l1"> {
+def FormMicrokernelsPass
+  : InterfacePass<"quidditch-form-microkernels", "mlir::FunctionOpInterface"> {
+  let dependentDialects = [
+    "quidditch::Snitch::QuidditchSnitchDialect",
+  ];
+}
+
+def PromoteOperandsToL1Pass : Pass<"quidditch-promote-operands-to-l1"> {
   let description = [{
-    Ensures that all tensors used within a microkernel are placed in L1 memory,
-    using copies if necessary.
+    TODO:
   }];
+
+  let dependentDialects = [
+    "quidditch::Snitch::QuidditchSnitchDialect",
+  ];
+}
+
+def PromoteAllocsToL1Pass : Pass<"quidditch-promote-allocs-to-l1"> {
+  let description = [{
+    TODO:
+  }];
+
+  let dependentDialects = [
+    "quidditch::Snitch::QuidditchSnitchDialect",
+  ];
 }
 
 def LowerL1AllocationsPass : InterfacePass<"quidditch-lower-l1-allocations",
@@ -39,6 +59,12 @@ def SpecializeDMACodePass : Pass<"quidditch-specialize-dma-code",
     Barriers are inserted where data dependencies require either transfers or
     computations to have finished.
   }];
+}
+
+def LowerForallOpPass : Pass<"quidditch-lower-forall-op"> {
+  let dependentDialects = [
+    "quidditch::Snitch::QuidditchSnitchDialect",
+  ];
 }
 
 #endif

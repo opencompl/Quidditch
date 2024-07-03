@@ -33,6 +33,12 @@ void quidditch_dispatch_set_kernel(
 void quidditch_dispatch_queue_workgroup(
     const iree_hal_executable_workgroup_state_v0_t* workgroup_state);
 
+/// Queues a workgroup on all compute cores with the last configured kernel and
+/// dispatch state and immediately starts executing the kernel on all compute
+/// cores.
+void quidditch_dispatch_queue_subgroups(
+    const iree_hal_executable_workgroup_state_v0_t* workgroup_state);
+
 /// Executes all queued workgroups and waits for them to finish.
 void quidditch_dispatch_execute_workgroups();
 
