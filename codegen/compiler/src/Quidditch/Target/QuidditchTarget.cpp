@@ -176,7 +176,7 @@ public:
         .addPass([] { return createTileAndDistributeToWorkgroupsPass(); })
         .addPass([] { return createConvertToDestinationPassingStylePass(); })
         .addPass(createFoldAffineMinInDistributedLoopsPass)
-        .addPass(createRemoveSingleIterationLoopPass)
+        .addPass(quidditch::createRemoveTrivialLoopsPass)
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
         .addPass(createFuseTensorPadWithConsumerPass)
@@ -234,7 +234,7 @@ public:
         .addPass(createCSEPass)
         .addPass(createLoopInvariantCodeMotionPass)
         .addPass(createLinalgGeneralizeNamedOpsPass)
-        .addPass(createRemoveSingleIterationLoopPass)
+        .addPass(quidditch::createRemoveTrivialLoopsPass)
         .addPass(quidditch::Snitch::createFormMicrokernelsPass);
 
     modulePassManager.addPass(quidditch::Snitch::createSpecializeDMACodePass());

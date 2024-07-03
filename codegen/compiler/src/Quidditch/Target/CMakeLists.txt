@@ -25,6 +25,7 @@ iree_cc_library(
         "DisableQuidditchVariant.cpp"
         "LinkExecutables.cpp"
         "ReluToMax.cpp"
+        "RemoveTrivialLoops.cpp"
         "TensorTile.cpp"
         DEPS
         ::PassesIncGen
