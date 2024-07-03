@@ -15,8 +15,9 @@ iree_cc_library(
         "Passes.h.inc"
         SRCS
         "FormMicrokernels.cpp"
-        "PromoteToL1.cpp"
+        "LowerForallOp.cpp"
         "LowerL1Allocations.cpp"
+        "PromoteToL1.cpp"
         "SpecializeDMACode.cpp"
         DEPS
         ::PassesIncGen
@@ -24,4 +25,5 @@ iree_cc_library(
         MLIRIR
         MLIRLinalgDialect
         MLIRBufferizationDialect
+        iree::compiler::Dialect::HAL::IR
 )

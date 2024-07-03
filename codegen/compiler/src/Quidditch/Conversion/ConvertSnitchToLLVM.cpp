@@ -297,6 +297,24 @@ struct CallMicrokernelOpLowering : ConvertOpToLLVMPattern<CallMicrokernelOp> {
     return success();
   }
 };
+
+struct ClusterIndexOpLowering : ConvertOpToLLVMPattern<ClusterIndexOp> {
+
+  LLVM::LLVMFuncOp clusterIndexFunc;
+
+  ClusterIndexOpLowering(LLVM::LLVMFuncOp clusterIndexFunc,
+                         const LLVMTypeConverter &converter)
+      : ConvertOpToLLVMPattern(converter), clusterIndexFunc(clusterIndexFunc) {}
+
+  LogicalResult
+  matchAndRewrite(ClusterIndexOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, clusterIndexFunc,
+                                              ValueRange());
+    return success();
+  }
+};
+
 } // namespace
 
 void ConvertSnitchToLLVM::runOnOperation() {
@@ -342,6 +360,11 @@ void ConvertSnitchToLLVM::runOnOperation() {
                                   ArrayRef<Type>{}));
   barrier->setAttr("hal.import.bitcode", builder.getUnitAttr());
 
+  auto clusterCoreIndex = builder.create<LLVM::LLVMFuncOp>(
+      builder.getUnknownLoc(), "snrt_cluster_core_idx",
+      LLVM::LLVMFunctionType::get(i32, ArrayRef<Type>{}));
+  clusterCoreIndex->setAttr("hal.import.bitcode", builder.getUnitAttr());
+
   SymbolTable symbolTable(getOperation());
   RewritePatternSet patterns(&getContext());
   patterns.insert<L1MemoryViewOpLowering, CompletedTokenOpLowering>(
@@ -350,6 +373,7 @@ void ConvertSnitchToLLVM::runOnOperation() {
   patterns.insert<StartDMATransferOp2DLowering>(dmaStart2D, typeConverter);
   patterns.insert<WaitForDMATransfersOpLowering>(dmaWait, typeConverter);
   patterns.insert<BarrierOpLowering>(barrier, typeConverter);
+  patterns.insert<ClusterIndexOpLowering>(clusterCoreIndex, typeConverter);
   patterns.insert<CallMicrokernelOpLowering>(symbolTable, typeConverter);
 
   LLVMConversionTarget target(getContext());
