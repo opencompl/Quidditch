@@ -43,4 +43,10 @@ def TensorTilePass : InterfacePass<"quidditch-tensor-tile",
   ];
 }
 
+def RemoveTrivialLoopsPass
+  : InterfacePass<"quidditch-remove-trivial-loops",
+      "mlir::FunctionOpInterface"> {
+
+}
+
 #endif

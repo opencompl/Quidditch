@@ -1,4 +1,7 @@
-// RUN: quidditch-opt %s -p "builtin.module(hal.executable(hal.executable.variant(builtin.module(func.func(quidditch-lower-forall-op)))))" -allow-unregistered-dialect | FileCheck %s
+// RUN: quidditch-opt %s -p "builtin.module(hal.executable(hal.executable.variant(builtin.module(func.func(quidditch-lower-forall-op)))))" --allow-unregistered-dialect | FileCheck %s
+
+// CHECK-DAG: #[[$MAP1:.*]] = affine_map<(d0, d1, d2) -> (d0 + d1 * d2)>
+// CHECK-DAG: #[[$MAP2:.*]] = affine_map<(d0) -> (d0 * 8)>
 
 // CHECK-LABEL: @test
 hal.executable @test {
@@ -11,11 +14,9 @@ hal.executable @test {
       // CHECK-SAME: %[[STEP:[[:alnum:]]+]]
       func.func @test(%lb : index, %ub : index, %step : index) {
         // CHECK: %[[ID:.*]] = quidditch_snitch.cluster_index
-        // CHECK: %[[LB2:.*]] = arith.muli %[[ID]], %[[STEP]]
-        // CHECK: %[[LB3:.*]] = arith.addi %[[LB]], %[[LB2]]
-        // CHECK: %[[CORES:.*]] = arith.constant 8
-        // CHECK: %[[STEP2:.*]] = arith.muli %[[STEP]], %[[CORES]]
-        // CHECK: scf.for %[[IV:.*]] = %[[LB3]] to %[[UB]] step %[[STEP2]]
+        // CHECK: %[[NLB:.*]] = affine.apply #[[$MAP1]](%[[LB]], %[[ID]], %[[STEP]])
+        // CHECK: %[[NSTEP:.*]] = affine.apply #[[$MAP2]](%[[STEP]])
+        // CHECK: scf.for %[[IV:.*]] = %[[NLB]] to %[[UB]] step %[[NSTEP]]
         scf.forall (%iter) = (%lb) to (%ub) step (%step) {
           // CHECK-NEXT: "test.op"(%[[IV]])
           "test.op"(%iter) : (index) -> ()
