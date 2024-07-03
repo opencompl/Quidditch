@@ -221,7 +221,7 @@ public:
     addIREEPostBufferizationPasses(modulePassManager.nest<func::FuncOp>());
 
     FunctionLikeNest(modulePassManager)
-        .addPass(createForallToForLoopPass)
+        .addPass(quidditch::Snitch::createLowerForallOpPass)
         // TODO: Remove the following pass and plumb support for
         // #hal.descriptor_type memory space through the stack.
         .addPass(createEraseHALDescriptorTypeFromMemRefPass)
@@ -231,6 +231,8 @@ public:
         })
         .addPass(quidditch::createReluToMaxPass)
         .addPass(createCanonicalizerPass)
+        .addPass(createCSEPass)
+        .addPass(createLoopInvariantCodeMotionPass)
         .addPass(createLinalgGeneralizeNamedOpsPass)
         .addPass(createRemoveSingleIterationLoopPass)
         .addPass(quidditch::Snitch::createFormMicrokernelsPass);

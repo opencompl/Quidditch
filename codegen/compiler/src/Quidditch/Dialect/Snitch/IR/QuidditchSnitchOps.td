@@ -169,4 +169,14 @@ def QuidditchSnitch_BarrierOp : QuidditchSnitch_Op<"barrier"> {
   }];
 }
 
+def QuidditchSnitch_ClusterIndexOp
+  : QuidditchSnitch_Op<"cluster_index", [Pure]> {
+
+  let results = (outs Index:$result);
+
+  let assemblyFormat = [{
+    attr-dict
+  }];
+}
+
 #endif
