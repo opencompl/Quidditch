@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: @test
 func.func @test() {
-  // CHECK: call @snrt_cluster_hw_barrier()
+  // CHECK: llvm.inline_asm has_side_effects "csrr x0, 0x7C2", "~{memory}"
   quidditch_snitch.barrier
   return
 }

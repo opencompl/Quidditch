@@ -23,6 +23,7 @@ iree_cc_library(
         ::PassesIncGen
         Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
         MLIRIR
+        MLIRAffineDialect
         MLIRLinalgDialect
         MLIRBufferizationDialect
         iree::compiler::Dialect::HAL::IR

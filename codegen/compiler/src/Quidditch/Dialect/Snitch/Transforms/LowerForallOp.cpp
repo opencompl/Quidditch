@@ -1,6 +1,6 @@
 #include "iree/compiler/Codegen/Utils/Utils.h"
 #include "iree/compiler/Dialect/HAL/IR/HALOps.h"
-#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/MemRef/Transforms/Transforms.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
@@ -49,12 +49,22 @@ void LowerForallOp::runOnOperation() {
     Value lb = forallOp.getLowerBound(builder).front();
     Value ub = forallOp.getUpperBound(builder).front();
     Value step = forallOp.getStep(builder).front();
-    lb = builder.create<arith::AddIOp>(
-        forallOp.getLoc(), lb,
-        builder.create<arith::MulIOp>(forallOp.getLoc(), id, step));
-    Value cores = builder.create<arith::ConstantIndexOp>(
-        forallOp.getLoc(), attr->getValue().getZExtValue());
-    step = builder.create<arith::MulIOp>(forallOp.getLoc(), step, cores);
+    lb = builder.create<affine::AffineApplyOp>(
+        forallOp.getLoc(),
+        AffineMap::get(
+            3, 0,
+            {builder.getAffineDimExpr(0) +
+             (builder.getAffineDimExpr(1) * builder.getAffineDimExpr(2))},
+            &getContext()),
+        ValueRange{lb, id, step});
+    step = builder.create<affine::AffineApplyOp>(
+        forallOp.getLoc(),
+        AffineMap::get(
+            1, 0,
+            {builder.getAffineConstantExpr(attr->getValue().getSExtValue()) *
+             builder.getAffineDimExpr(0)},
+            &getContext()),
+        step);
     auto forOp = builder.create<scf::ForOp>(forallOp.getLoc(), lb, ub, step);
 
     forOp.getRegion().takeBody(forallOp.getRegion());

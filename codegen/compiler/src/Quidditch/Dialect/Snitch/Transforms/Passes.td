@@ -63,6 +63,7 @@ def SpecializeDMACodePass : Pass<"quidditch-specialize-dma-code",
 
 def LowerForallOpPass : Pass<"quidditch-lower-forall-op"> {
   let dependentDialects = [
+    "mlir::affine::AffineDialect",
     "quidditch::Snitch::QuidditchSnitchDialect",
   ];
 }
