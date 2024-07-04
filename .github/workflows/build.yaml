@@ -97,4 +97,10 @@ jobs:
           rm -rf ${{github.workspace}}/build/*.o ${{github.workspace}}/build/*.a
           cd ${{github.workspace}}/build/runtime
           # NsNet2 traces ought to fit here. 
-          ctest -R NsNet2 --extra-verbose -j$(nproc)
+          ctest -R "NsNet2$" --extra-verbose -j$(nproc)
+
+      - name: Upload traces
+        if: ${{ github.event_name != 'schedule' }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{github.workspace}}/build/runtime/tests/NsNet2.test/events.json
