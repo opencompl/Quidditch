@@ -61,7 +61,7 @@ macro(test_executable target_name)
     )
     list(APPEND gen_traces_targets "${target_name}-analysis-hart-${i}")
     list(APPEND gen_traces_jsons "${CMAKE_CURRENT_BINARY_DIR}/${target_name}.test/hart_${i}_perf.json")
-    list(APPEND gen_traces_raw "${CMAKE_CURRENT_BINARY_DIR}/${target_name}.test/logs/trace_hart_0000000${i}.asm")
+    list(APPEND gen_traces_raw "${CMAKE_CURRENT_BINARY_DIR}/${target_name}.test/logs/trace_hart_0000000${i}.dasm")
   endforeach ()
 
   add_test(NAME ${target_name}-events.json
