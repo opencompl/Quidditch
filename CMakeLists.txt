@@ -20,6 +20,17 @@ execute_process(
     COMMAND "${Python3_EXECUTABLE}" -m pip install -r ${CMAKE_CURRENT_LIST_DIR}/requirements.txt
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR} COMMAND_ERROR_IS_FATAL ANY)
 
+# Reconfigure if any of the 'requirements.txt' files changed or we update the xDSL commit.
+# This then reruns 'pip install'.
+# TODO: Could make this a build step instead of a configure step.
+set(python_reqs)
+file(GLOB_RECURSE temp LIST_DIRECTORIES false CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/codegen/requirements.txt)
+list(APPEND python_reqs ${temp})
+file(GLOB_RECURSE temp LIST_DIRECTORIES false CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/runtime/requirements.txt)
+list(APPEND python_reqs ${temp})
+list(APPEND python_reqs ${CMAKE_CURRENT_LIST_DIR}/.git/modules/xdsl/HEAD)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${python_reqs})
+
 include(ExternalProject)
 
 macro(append_if_defined list variable)
