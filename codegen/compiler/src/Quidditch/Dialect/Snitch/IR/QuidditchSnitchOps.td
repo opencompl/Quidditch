@@ -112,12 +112,9 @@ def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer"
     operation with the token returned by this operation or a later one.
   }];
 
-  // TODO: In reality what the constraint here is, is that both of them must either be contiguous or if a dimension is
-  //       not contiguous in one of them, all dimensions prior to that must be contiguous (i.e. of equal size).
-  //       Can support higher dimensions and funkier strides once needed.
   let arguments = (ins
-    Arg<MemRefRankOf<[AnyType], [1, 2]>, "source", [MemRead]>:$source,
-    Arg<MemRefRankOf<[AnyType], [1, 2]>, "destination", [MemWrite]>:$dest
+    Arg<Non0RankedMemRefOf<[AnyType]>, "source", [MemRead]>:$source,
+    Arg<Non0RankedMemRefOf<[AnyType]>, "destination", [MemWrite]>:$dest
   );
 
   let results = (outs QuidditchSnitch_DMATokenType:$token);
