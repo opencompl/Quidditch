@@ -7,6 +7,7 @@
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
@@ -63,6 +64,8 @@ struct L1MemoryViewOpLowering : ConvertOpToLLVMPattern<L1MemoryViewOp> {
 };
 
 /// Returns true if this MemRef type is known to have a fully contiguous layout.
+/// TODO: Could be upstreamed next to
+/// 'memref::isStaticShapeAndContiguousRowMajor'
 bool isContiguous(MemRefType memRefType) {
   MemRefLayoutAttrInterface layout = memRefType.getLayout();
   if (!layout || layout.isIdentity())
@@ -80,6 +83,10 @@ bool isContiguous(MemRefType memRefType) {
   std::uint64_t currentIdentityStride = 1;
   for (auto [dim, stride] : llvm::zip_equal(llvm::reverse(shape.drop_front()),
                                             strides.drop_front())) {
+    // Unit dimensions are noops in regards to strides.
+    if (dim == 1)
+      continue;
+
     if (currentIdentityStride != stride)
       return false;
 
@@ -87,7 +94,12 @@ bool isContiguous(MemRefType memRefType) {
       return false;
     currentIdentityStride *= dim;
   }
-  return currentIdentityStride == strided.getStrides().front();
+
+  // Unit dimensions are noops in regards to strides.
+  if (shape.front() == 1)
+    return true;
+
+  return currentIdentityStride == strides.front();
 }
 
 struct StartDMATransferOp1DLowering
@@ -151,11 +163,74 @@ struct StartDMATransferOp2DLowering
                                const LLVMTypeConverter &converter)
       : ConvertOpToLLVMPattern(converter), dmaStart2DFunc(dmaStart2DFunc) {}
 
+  static StridedLayoutAttr identityStride(MemRefType type) {
+    SmallVector<int64_t> strides{1};
+    for (int64_t dim : llvm::reverse(type.getShape().drop_back())) {
+      if (ShapedType::isDynamic(dim))
+        break;
+      strides.push_back(strides.back() * dim);
+    }
+
+    while (strides.size() < type.getShape().size())
+      strides.push_back(ShapedType::kDynamic);
+
+    std::reverse(strides.begin(), strides.end());
+    return StridedLayoutAttr::get(type.getContext(), 0, strides);
+  }
+
   LogicalResult
   matchAndRewrite(StartDMATransferOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (op.getSource().getType().getRank() != 2)
-      return failure();
+    MemRefType sourceMemRef = op.getSource().getType();
+    MemRefType destMemRef = op.getDest().getType();
+
+    StridedLayoutAttr sourceStridesAttr =
+        dyn_cast_or_null<StridedLayoutAttr>(sourceMemRef.getLayout());
+    if (!sourceStridesAttr) {
+      if (sourceMemRef.getLayout() && !sourceMemRef.getLayout().isIdentity())
+        return failure();
+
+      sourceStridesAttr = identityStride(sourceMemRef);
+    }
+
+    StridedLayoutAttr destStridesAttr =
+        dyn_cast_or_null<StridedLayoutAttr>(destMemRef.getLayout());
+    if (!destStridesAttr) {
+      if (destMemRef.getLayout() && !destMemRef.getLayout().isIdentity())
+        return failure();
+
+      destStridesAttr = identityStride(destMemRef);
+    }
+
+    // Compute the size of the contiguous inner loop common to both MemRefs and
+    // "shave" it off the ends of the shapes and strides. The remaining shapes
+    // and strides are considered our outer dimensions.
+    int64_t innerSize = 1;
+    ArrayRef<int64_t> shape = sourceMemRef.getShape();
+    ArrayRef<int64_t> sourceStrides = sourceStridesAttr.getStrides();
+    ArrayRef<int64_t> destStrides = destStridesAttr.getStrides();
+    assert(shape.size() == sourceStrides.size() &&
+           sourceStrides.size() == destStrides.size());
+    for (; shape.size() > 1; shape = shape.drop_back(),
+                             sourceStrides = sourceStrides.drop_back(),
+                             destStrides = destStrides.drop_back()) {
+      int64_t dim = shape.back();
+      if (dim == 1)
+        continue;
+
+      int64_t sourceStride = sourceStrides.back();
+      int64_t destStride = destStrides.back();
+      if (sourceStride != destStride)
+        break;
+
+      if (innerSize != sourceStride)
+        break;
+
+      if (ShapedType::isDynamic(dim))
+        break;
+
+      innerSize *= dim;
+    }
 
     MemRefDescriptor sourceDescriptor(adaptor.getSource());
     MemRefDescriptor destDescriptor(adaptor.getDest());
@@ -165,20 +240,85 @@ struct StartDMATransferOp2DLowering
     Value dest = destDescriptor.bufferPtr(
         rewriter, op->getLoc(), *getTypeConverter(), op.getSource().getType());
 
-    Value size = rewriter.create<LLVM::ConstantOp>(
+    Value elementSize = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(),
         rewriter.getI32IntegerAttr(llvm::divideCeil(
             op.getSource().getType().getElementTypeBitWidth(), 8)));
-    size = rewriter.create<LLVM::MulOp>(
-        op->getLoc(), size, sourceDescriptor.size(rewriter, op->getLoc(), 0));
+    Value contiguousSize = rewriter.create<LLVM::ConstantOp>(
+        op->getLoc(), rewriter.getI32IntegerAttr(innerSize));
+    contiguousSize =
+        rewriter.create<LLVM::MulOp>(op->getLoc(), contiguousSize, elementSize);
 
-    Value sourceStride = sourceDescriptor.stride(rewriter, op->getLoc(), 1);
-    Value destStride = destDescriptor.stride(rewriter, op->getLoc(), 1);
+    // Build a loop nest iterating over all outer dimensions - 1 and adjusts the
+    // source and destination pointers accordingly. The inner-most outer
+    // dimension is used in the DMA call for the repetition count and strides.
+    SmallVector<Value> lowerBounds;
+    SmallVector<Value> upperBounds;
+    SmallVector<Value> steps;
+    Value zeroIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 0);
+    Value oneIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
+    for (size_t index : llvm::seq(shape.size() - 1)) {
+      lowerBounds.push_back(zeroIndex);
+      steps.push_back(oneIndex);
+      Value dim = typeConverter->materializeSourceConversion(
+          rewriter, op->getLoc(), rewriter.getIndexType(),
+          sourceDescriptor.size(rewriter, op->getLoc(), index));
+      upperBounds.push_back(dim);
+    }
 
-    rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-        op, dmaStart2DFunc,
-        ValueRange{dest, source, size, destStride, sourceStride,
-                   sourceDescriptor.size(rewriter, op->getLoc(), 1)});
+    Type tokenType = typeConverter->convertType(op.getType());
+    Value completedToken = rewriter.create<CompletedTokenOp>(op->getLoc());
+    completedToken = typeConverter->materializeTargetConversion(
+        rewriter, op->getLoc(), tokenType, completedToken);
+
+    scf::LoopNest loopNest = scf::buildLoopNest(
+        rewriter, op->getLoc(), lowerBounds, upperBounds, steps, completedToken,
+        [&](OpBuilder &builder, Location loc, ValueRange ivs,
+            ValueRange iterArgs) -> scf::ValueVector {
+          auto linearizeOffset = [&](MemRefDescriptor descriptor) {
+            Value offset =
+                rewriter.create<LLVM::ZeroOp>(loc, rewriter.getI32Type());
+            for (auto [index, iv] : llvm::enumerate(ivs)) {
+              Value increment = rewriter.create<LLVM::MulOp>(
+                  loc,
+                  typeConverter->materializeTargetConversion(
+                      builder, op->getLoc(),
+                      typeConverter->convertType(iv.getType()), iv),
+                  descriptor.stride(builder, loc, index));
+              offset = rewriter.create<LLVM::AddOp>(loc, offset, increment);
+            }
+            return offset;
+          };
+
+          Value sourceAdjusted = rewriter.create<LLVM::GEPOp>(
+              loc, source.getType(),
+              typeConverter->convertType(sourceMemRef.getElementType()), source,
+              linearizeOffset(sourceDescriptor));
+          Value destAdjusted = rewriter.create<LLVM::GEPOp>(
+              loc, dest.getType(),
+              typeConverter->convertType(destMemRef.getElementType()), dest,
+              linearizeOffset(destDescriptor));
+
+          Value sourceStride =
+              sourceDescriptor.stride(builder, loc, sourceStrides.size() - 1);
+          Value destStride =
+              destDescriptor.stride(builder, loc, destStrides.size() - 1);
+          Value outerLoopSize =
+              sourceDescriptor.size(builder, loc, shape.size() - 1);
+          return {builder
+                      .create<LLVM::CallOp>(loc, dmaStart2DFunc,
+                                            ValueRange{
+                                                destAdjusted,
+                                                sourceAdjusted,
+                                                contiguousSize,
+                                                destStride,
+                                                sourceStride,
+                                                outerLoopSize,
+                                            })
+                      .getResult()};
+        });
+
+    rewriter.replaceOp(op, loopNest.results.front());
     return success();
   }
 };
