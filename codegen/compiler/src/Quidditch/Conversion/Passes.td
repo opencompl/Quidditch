@@ -22,6 +22,7 @@ def ConvertSnitchToLLVMPass
     : Pass<"quidditch-convert-snitch-to-llvm", "mlir::ModuleOp"> {
   let dependentDialects = [
     "mlir::LLVM::LLVMDialect",
+    "mlir::scf::SCFDialect",
   ];
 }
 
