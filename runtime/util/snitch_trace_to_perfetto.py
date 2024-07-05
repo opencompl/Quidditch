@@ -212,7 +212,7 @@ class KernelNameResolver:
         return p.stdout.splitlines()[0]
 
     def get_name(self, cycle: int, hartid: int):
-        pattern = re.compile(r"\s*[0-9]+ " + str(cycle))
+        pattern = re.compile(r"\s*[0-9]+ " + str(cycle - 1))
         iterator = self.traces[hartid]
         for l in iterator:
             if pattern.match(l):
