@@ -75,13 +75,12 @@ jobs:
           -DOVERRIDE_VENV=ON \
           -S ${{github.workspace}}
 
-      # TODO: Flip before running.
       - name: Build and Test precommit
-        if: ${{ github.event_name == 'schedule' }}
+        if: ${{ github.event_name == 'pull_request' }}
         run: cmake --build ${{github.workspace}}/build --target test
 
       - uses: jlumbroso/free-disk-space@v1.3.1
-        if: ${{ github.event_name != 'schedule' }}
+        if: ${{ github.event_name != 'pull_request' }}
         with:
           tool-cache: false
           android: true
@@ -90,7 +89,7 @@ jobs:
           large-packages: false
 
       - name: Build and Test nightly
-        if: ${{ github.event_name != 'schedule' }}
+        if: ${{ github.event_name != 'pull_request' }}
         run: |
           cmake --build ${{github.workspace}}/build --target runtime
           # Clean disk space ahead of runs.
@@ -100,7 +99,7 @@ jobs:
           ctest -R "NsNet2$" --extra-verbose -j$(nproc)
 
       - name: Upload traces
-        if: ${{ github.event_name != 'schedule' }}
+        if: ${{ github.event_name != 'pull_request' }}
         uses: actions/upload-artifact@v4.3.3
         with:
           name: 'Perfetto traces'
