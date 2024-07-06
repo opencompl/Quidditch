@@ -385,6 +385,9 @@ public:
               llvm::GlobalValue::LinkageTypes::InternalLinkage);
           // Name suffix recognized by tooling for xDSL generated kernels.
           llvmFunc->setName(llvmFunc->getName() + "$iree_to_xdsl");
+          if (llvm::DISubprogram *subProgram = llvmFunc->getSubprogram())
+            subProgram->replaceLinkageName(llvm::MDString::get(
+                llvmFunc->getContext(), llvmFunc->getName()));
         }
       }
 
