@@ -376,6 +376,34 @@ struct BarrierOpLowering : ConvertOpToLLVMPattern<BarrierOp> {
   }
 };
 
+struct MicrokernelFenceOpLowering : ConvertOpToLLVMPattern<MicrokernelFenceOp> {
+
+  using ConvertOpToLLVMPattern<MicrokernelFenceOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(MicrokernelFenceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Sync up the FPU and integer pipelines by creating a (fake) data
+    // dependency between an FPU and integer register.
+    rewriter.create<LLVM::InlineAsmOp>(
+        op.getLoc(), /*res=*/rewriter.getI32Type(),
+        /*operands=*/ValueRange(),
+        "fmv.x.w $0, fa0\n"
+        "mv $0, $0",
+        // Tell the register allocator to allocate `$0` as if returning a
+        // register. Also consider it to clob memory given that all
+        // side effects of the FPU pipeline only become visible after this
+        // instruction.
+        /*constraints=*/"=r,~{memory}",
+        // 'has_side_effects' is currently set to true due to a bug in MLIR
+        // DCEing despite the memory clobber.
+        /*has_side_effects=*/true, /*is_align_stack=*/false,
+        /*asm_dialect=*/nullptr, /*operand_attrs=*/nullptr);
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 struct CallMicrokernelOpLowering : ConvertOpToLLVMPattern<CallMicrokernelOp> {
   SymbolTable &symbolTable;
 
@@ -505,7 +533,7 @@ void ConvertSnitchToLLVM::runOnOperation() {
   SymbolTable symbolTable(getOperation());
   RewritePatternSet patterns(&getContext());
   patterns.insert<L1MemoryViewOpLowering, CompletedTokenOpLowering,
-                  BarrierOpLowering>(typeConverter);
+                  BarrierOpLowering, MicrokernelFenceOpLowering>(typeConverter);
   patterns.insert<StartDMATransferOp1DLowering>(dmaStart1D, typeConverter);
   patterns.insert<StartDMATransferOp2DLowering>(dmaStart2D, typeConverter);
   patterns.insert<WaitForDMATransfersOpLowering>(dmaWait, typeConverter);

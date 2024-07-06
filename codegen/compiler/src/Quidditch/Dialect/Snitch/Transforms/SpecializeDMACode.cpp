@@ -28,7 +28,10 @@ using namespace mlir;
 using namespace quidditch::Snitch;
 
 static void removeComputeOps(FunctionOpInterface dmaCode) {
-  dmaCode->walk([&](MemRefMicrokernelOp operation) { operation->erase(); });
+  dmaCode->walk([&](Operation *operation) {
+    if (isa<MemRefMicrokernelOp, MicrokernelFenceOp>(operation))
+      operation->erase();
+  });
 }
 
 static void removeDmaCode(FunctionOpInterface computeCode) {
@@ -46,16 +49,17 @@ static void removeDmaCode(FunctionOpInterface computeCode) {
 static void insertBarriers(FunctionOpInterface function) {
   function->walk([](Operation *operation) {
     OpBuilder builder(operation->getContext());
-    if (isa<WaitForDMATransfersOp>(operation))
+    if (isa<WaitForDMATransfersOp>(operation)) {
       // Barrier needs to be after the wait to signal to compute ops the
       // transfer is done.
       builder.setInsertionPointAfter(operation);
-    else if (isa<StartDMATransferOp>(operation))
+    } else if (isa<StartDMATransferOp>(operation)) {
       // Barrier needs to be before the transfer for compute ops to signal
       // that a computation is done.
       // TODO: This is overly conservative and could be optimized somewhere.
       builder.setInsertionPoint(operation);
-    else
+      builder.create<MicrokernelFenceOp>(operation->getLoc());
+    } else
       return;
 
     builder.create<BarrierOp>(operation->getLoc());
@@ -65,7 +69,9 @@ static void insertBarriers(FunctionOpInterface function) {
 void SpecializeDMACode::runOnOperation() {
   auto *dialect = getContext().getLoadedDialect<QuidditchSnitchDialect>();
   SymbolTable table(getOperation());
-  for (auto function : getOperation().getOps<FunctionOpInterface>()) {
+  auto toSpecialize =
+      llvm::to_vector(getOperation().getOps<FunctionOpInterface>());
+  for (FunctionOpInterface function : toSpecialize) {
     if (function.isDeclaration())
       continue;
 
@@ -73,7 +79,7 @@ void SpecializeDMACode::runOnOperation() {
 
     FunctionOpInterface clone = function.clone();
     clone.setName((clone.getName() + "$dma").str());
-    table.insert(clone, function->getIterator());
+    table.insert(clone, std::next(function->getIterator()));
     dialect->getDmaSpecializationAttrHelper().setAttr(
         function, FlatSymbolRefAttr::get(clone));
 
