@@ -17,7 +17,14 @@ def QuidditchSnitch_MemRefMicrokernelOp
       NoTerminator]> {
 
   let description = [{
+    Operation denoting a region of operations as a microkernel.
+    The region is `IsolatedFromAbove` making all inputs to the microkernel explicit.
+    A later compilation step turns the "uncompiled" microkernel into a compiled
+    `call_microkernel` operation.
 
+    Operations within the Microkernel may be executed asynchronous.
+    Side-effects of operations are therefore only guaranteed to be visible
+    after a subsequent invocation of `microkernel_fence`.
   }];
 
   let arguments = (ins Variadic<AnyType>:$inputs);
@@ -40,7 +47,14 @@ def QuidditchSnitch_CallMicrokernelOp
   : QuidditchSnitch_Op<"call_microkernel"> {
 
   let description = [{
+    Operation denoting a call to a compiled microkernel.
+    The compiled artifact is available as the `riscv_assembly` attribute.
+    `name` is used as a hint for the symbol name of the microkernel and has no
+    semantics.
 
+    The Microkernel may be executed asynchronous.
+    Side-effects of operations are therefore only guaranteed to be visible
+    after a subsequent invocation of `microkernel_fence`.
   }];
 
   let arguments = (ins StrAttr:$name, Variadic<AnyType>:$inputs, StrAttr:$riscv_assembly);
@@ -55,6 +69,19 @@ def QuidditchSnitch_CallMicrokernelOp
 
   let extraClassDeclaration = [{
     static bool supportsArgumentType(mlir::Type type);
+  }];
+}
+
+def QuidditchSnitch_MicrokernelFenceOp : QuidditchSnitch_Op<"microkernel_fence"> {
+
+  let description = [{
+    Execution of this operation guarantees that the side-effects of all
+    previous microkernel invocations are visible as soon as this operation
+    returns.
+  }];
+
+  let assemblyFormat = [{
+    attr-dict
   }];
 }
 
