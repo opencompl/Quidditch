@@ -50,3 +50,17 @@ func.func @scf_for_copy_l1_buffer() -> tensor<32xf32> {
   }
   return %r3 : tensor<32xf32>
 }
+
+// CHECK: func @copy_l1_buffer_dynamic_dims(
+func.func @copy_l1_buffer_dynamic_dims(%arg0 : tensor<?xf32>) -> tensor<?xf32> {
+  // CHECK: %[[ARG0:.*]] = bufferization.to_memref
+  // CHECK: %[[ZERO:.*]] = arith.constant 0
+  // CHECK: %[[DIM:.*]] = memref.dim %[[ARG0]], %[[ZERO]]
+  // CHECK: %[[ALLOC:.*]] = memref.alloc(%[[DIM]])
+  // CHECK-SAME: : memref<?xf32, #quidditch_snitch.l1_encoding>
+  // CHECK: memref.copy %[[ARG0]], %[[ALLOC]]
+  // CHECK: %[[R:.*]] = bufferization.to_tensor %[[ALLOC]]
+  %r = quidditch_snitch.copy_tensor %arg0 to L1 : tensor<?xf32>
+  // CHECK: return %[[R]]
+  return %r : tensor<?xf32>
+}

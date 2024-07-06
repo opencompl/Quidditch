@@ -2,6 +2,7 @@
 
 #include "llvm/ADT/ScopeExit.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
 
@@ -330,15 +331,17 @@ LogicalResult CopyTensorOp::bufferize(RewriterBase &rewriter,
   if (failed(allocType))
     return failure();
 
-  // TODO: Add operands to the op representing the dynamic dimensions of the
-  //  result tensor and use them below.
-  if (!allocType->hasStaticShape())
-    return emitOpError(
-        "Bufferizing results with dynamic dimensions is not yet implemented");
+  SmallVector<Value> dynamicDims;
+  for (auto [index, shape] : llvm::enumerate(allocType->getShape())) {
+    if (!ShapedType::isDynamic(shape))
+      continue;
+    dynamicDims.push_back(
+        rewriter.create<memref::DimOp>(getLoc(), *copyBuffer, index));
+  }
 
   FailureOr<Value> alloc = options.createAlloc(
       rewriter, getLoc(), llvm::cast<MemRefType>(*allocType),
-      /*dynShape=*/ValueRange());
+      /*dynShape=*/dynamicDims);
   if (failed(alloc))
     return failure();
 
