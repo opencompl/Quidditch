@@ -1,5 +1,6 @@
 #include "Passes.h"
 
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchAttrs.h"
 #include "iree/compiler/Codegen/Dialect/Codegen/IR/IREECodegenAttrs.h"
 #include "iree/compiler/Codegen/Utils/CPUUtils.h"
 #include "iree/compiler/Codegen/Utils/Utils.h"
@@ -27,6 +28,14 @@ protected:
 };
 } // namespace
 
+static LogicalResult setTranslationInfo(FunctionOpInterface funcOp) {
+  return setTranslationInfo(
+      funcOp,
+      IREE::Codegen::TranslationInfoAttr::get(
+          funcOp.getContext(),
+          IREE::Codegen::DispatchLoweringPassPipeline::None, SymbolRefAttr()));
+}
+
 static LogicalResult setRootConfig(FunctionOpInterface funcOp,
                                    Operation *rootOp) {
   return TypeSwitch<Operation *, LogicalResult>(rootOp)
@@ -37,7 +46,7 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
         // Should be as high as possible for subgroup distribution.
         // Should be a multiple of 8 to be further distributed to compute cores.
 
-        // [2]: Reduction dimension (0 to 161). How many columns are we
+        // [2]: Reduction dimension. How many columns are we
         // processing at once? Cannot be distributed but has a few effects:
         // * It allows us to make [1] larger by fitting more rows into L1.
         //   This therefore also gives us more parallelism compute core wise.
@@ -52,47 +61,28 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
             "main$async_dispatch_0_matmul_transpose_b_1x400x161_f64") {
           bounds[1] = 40;
           bounds[2] = 0;
-
-          TileSizesListType tileSizes = {bounds};
-          return setOpConfigAndEntryPointFnTranslation(
-              funcOp, rootOp, tileSizes,
-              IREE::Codegen::DispatchLoweringPassPipeline::None);
         }
         if (funcOp.getName() ==
             "main$async_dispatch_7_matmul_transpose_b_1x600x400_f64") {
           bounds[0] = 0;
           bounds[1] = 24;
           bounds[2] = 0;
-
-          TileSizesListType tileSizes = {bounds};
-          return setOpConfigAndEntryPointFnTranslation(
-              funcOp, rootOp, tileSizes,
-              IREE::Codegen::DispatchLoweringPassPipeline::None);
         }
         if (funcOp.getName() ==
             "main$async_dispatch_8_matmul_transpose_b_1x600x600_f64") {
           bounds[0] = 0;
           bounds[1] = 40;
           bounds[2] = 300;
-
-          TileSizesListType tileSizes = {bounds};
-          return setOpConfigAndEntryPointFnTranslation(
-              funcOp, rootOp, tileSizes,
-              IREE::Codegen::DispatchLoweringPassPipeline::None);
         }
         if (funcOp.getName() ==
             "main$async_dispatch_1_matmul_transpose_b_1x1200x400_f64") {
-          // Future subgroup distribution.
           bounds[0] = 0;
           bounds[1] = 24;
           bounds[2] = 0;
-
-          TileSizesListType tileSizes = {bounds};
-          return setOpConfigAndEntryPointFnTranslation(
-              funcOp, rootOp, tileSizes,
-              IREE::Codegen::DispatchLoweringPassPipeline::None);
         }
 
+        setLoweringConfig(rootOp, quidditch::Snitch::LoweringConfigAttr::get(
+                                      rootOp->getContext(), bounds));
         return success();
       })
       .Default(success());
@@ -110,6 +100,12 @@ void ConfigureForSnitch::runOnOperation() {
   Operation *rootOperation = rootOp.value();
   if (!rootOperation)
     return;
+
+  // Set the same translation info for all functions right now.
+  // This should move into 'setRootConfig' if we gain different pass pipelines
+  // for different kernels.
+  if (failed(setTranslationInfo(funcOp)))
+    return signalPassFailure();
 
   if (failed(setRootConfig(funcOp, rootOperation)))
     return signalPassFailure();

@@ -1,11 +1,13 @@
 #include "QuidditchSnitchAttrs.h"
 
-#include "llvm/ADT/TypeSwitch.h"
-#include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/OpDefinition.h"
-#include "mlir/IR/OpImplementation.h"
+using namespace mlir;
+using namespace quidditch::Snitch;
+using namespace mlir::iree_compiler;
 
-#include "QuidditchSnitchDialect.h"
+//===----------------------------------------------------------------------===//
+// LoweringConfigAttr::LoweringConfigAttrInterface
+//===----------------------------------------------------------------------===//
 
-#define GET_ATTRDEF_CLASSES
-#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchAttrs.cpp.inc"
+SmallVector<int64_t> LoweringConfigAttr::getWorkgroupTileSizes() const {
+  return llvm::to_vector(getWorkgroupTiles());
+}

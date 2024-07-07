@@ -1,5 +1,6 @@
 #include "Passes.h"
 
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchAttrs.h"
 #include "iree/compiler/Codegen/Dialect/Codegen/IR/IREECodegenAttrs.h"
 #include "iree/compiler/Codegen/Transforms/Transforms.h"
 #include "iree/compiler/Codegen/Utils/Utils.h"
@@ -215,8 +216,8 @@ void TensorTile::runOnOperation() {
     break;
   case TilingLevel::Reduction:
     funcOp->walk([&](TilingInterface target) {
-      if (IREE::Codegen::LoweringConfigAttrInterface loweringConfig =
-              getLoweringConfig(target))
+      if (auto loweringConfig =
+              getLoweringConfig<quidditch::Snitch::LoweringConfigAttr>(target))
         targetOps.insert(target);
     });
     break;

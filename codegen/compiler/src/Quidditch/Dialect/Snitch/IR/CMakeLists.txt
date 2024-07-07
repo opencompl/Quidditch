@@ -29,6 +29,7 @@ iree_cc_library(
         MLIRIR
         MLIRInferTypeOpInterface
         MLIRSupport
+        iree::compiler::Codegen::Dialect::Codegen::IR::IREECodegenDialect
         PUBLIC
 )
 
