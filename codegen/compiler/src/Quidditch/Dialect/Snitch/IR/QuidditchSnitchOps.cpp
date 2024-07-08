@@ -186,7 +186,7 @@ LogicalResult CallMicrokernelOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// CopyL1TensorOp
+// CopyTensorOp
 //===----------------------------------------------------------------------===//
 
 OpFoldResult CopyTensorOp::fold(FoldAdaptor adaptor) {
@@ -198,13 +198,15 @@ OpFoldResult CopyTensorOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
-// CopyL1TensorOp::BufferizableOpInterface
+// CopyTensorOp::BufferizableOpInterface
 //===----------------------------------------------------------------------===//
 
+/// Returns whether 'copy' is already in L1 memory.
+/// Returns an empty optional if it was not possible to determine.
 static std::optional<bool>
-addressSpaceMatches(bool toL1Memory, Value copy,
-                    const bufferization::BufferizationOptions &options = {},
-                    SmallVector<Value> *invocationStack = nullptr) {
+isInL1Memory(Value copy,
+             const bufferization::BufferizationOptions &options = {},
+             SmallVector<Value> *invocationStack = nullptr) {
   FailureOr<BaseMemRefType> copyType =
       invocationStack
           ? bufferization::getBufferType(copy, options, *invocationStack)
@@ -212,16 +214,14 @@ addressSpaceMatches(bool toL1Memory, Value copy,
   if (failed(copyType))
     return std::nullopt;
 
-  return toL1Memory ==
-         isa_and_nonnull<L1EncodingAttr>(copyType->getMemorySpace());
+  return isa_and_nonnull<L1EncodingAttr>(copyType->getMemorySpace());
 }
 
 bool CopyTensorOp::resultBufferizesToMemoryWrite(
     OpResult opResult, const bufferization::AnalysisState &state) {
   assert(opResult == getResult() && "no other result");
 
-  std::optional<bool> matches =
-      addressSpaceMatches(getTransfersToL1(), getCopy(), state.getOptions());
+  std::optional<bool> matches = isInL1Memory(getCopy(), state.getOptions());
   // Conservative answer.
   if (!matches)
     return true;
@@ -235,14 +235,13 @@ bool CopyTensorOp::bufferizesToMemoryRead(
     OpOperand &opOperand, const bufferization::AnalysisState &state) {
   assert(opOperand == getCopyMutable() && "have only one operand");
 
-  std::optional<bool> matches =
-      addressSpaceMatches(getTransfersToL1(), getCopy(), state.getOptions());
+  std::optional<bool> result = isInL1Memory(getCopy(), state.getOptions());
   // Conservative answer.
-  if (!matches)
+  if (!result)
     return true;
 
   // We only read from the buffer if we are copying.
-  return !*matches;
+  return !*result;
 }
 
 bool CopyTensorOp::bufferizesToMemoryWrite(
@@ -258,15 +257,14 @@ CopyTensorOp::getAliasingValues(OpOperand &opOperand,
                                 const bufferization::AnalysisState &state) {
   assert(opOperand == getCopyMutable() && "have only one operand");
 
-  std::optional<bool> matches =
-      addressSpaceMatches(getTransfersToL1(), getCopy(), state.getOptions());
-  if (!matches)
+  std::optional<bool> result = isInL1Memory(getCopy(), state.getOptions());
+  if (!result)
     // Assume the worst case.
     return {{getResult(), BufferRelation::Equivalent, /*isDefinite=*/false}};
 
-  // Always a brand-new allocation unless the address space matches and we elide
-  // the copy, in which case operand and result alias.
-  if (*matches)
+  // Always a brand-new allocation unless the input buffer is already in L1 and
+  // we elide the copy, in which case operand and result alias.
+  if (*result)
     return {{getResult(), BufferRelation::Equivalent, /*isDefinite=*/true}};
 
   return {};
@@ -275,8 +273,11 @@ CopyTensorOp::getAliasingValues(OpOperand &opOperand,
 bool CopyTensorOp::bufferizesToAllocation(Value value) {
   assert(value == getResult() && "have only one result");
 
-  // True is the conservative reply according to the docs.
-  return addressSpaceMatches(getTransfersToL1(), getCopy()).value_or(true);
+  if (isInL1Memory(getCopy()) == true)
+    return false;
+
+  // True is the conservative reply, according to the docs.
+  return true;
 }
 
 FailureOr<BaseMemRefType>
@@ -286,18 +287,14 @@ CopyTensorOp::getBufferType(Value value, const BufferizationOptions &options,
 
   bool contained = llvm::is_contained(invocationStack, value);
   if (!contained)
-    if (addressSpaceMatches(getTransfersToL1(), getCopy(), options,
-                            &invocationStack)
-            .value_or(false))
+    if (isInL1Memory(getCopy(), options, &invocationStack) == true)
       return bufferization::getBufferType(getCopy(), options, invocationStack);
 
   // Unless contained in the invocation stack (where we are free to impose the
   // most optimal layout), we do not really impose a specific layout on the
   // result. Contiguous is a good bet for now.
-  Attribute memorySpace =
-      getTransfersToL1() ? L1EncodingAttr::get(getContext()) : nullptr;
-  return getMemRefTypeWithStaticIdentityLayout(getResult().getType(),
-                                               memorySpace);
+  return getMemRefTypeWithStaticIdentityLayout(
+      getResult().getType(), L1EncodingAttr::get(getContext()));
 }
 
 LogicalResult CopyTensorOp::bufferize(RewriterBase &rewriter,
@@ -316,12 +313,11 @@ LogicalResult CopyTensorOp::bufferize(RewriterBase &rewriter,
   if (failed(copyBuffer))
     return failure();
 
-  std::optional<bool> matches =
-      addressSpaceMatches(getTransfersToL1(), getCopy(), options);
-  if (!matches)
+  std::optional<bool> result = isInL1Memory(getCopy(), options);
+  if (!result)
     return failure();
 
-  if (*matches) {
+  if (*result) {
     replaceOpWithBufferizedValues(rewriter, getOperation(), *copyBuffer);
     return success();
   }
