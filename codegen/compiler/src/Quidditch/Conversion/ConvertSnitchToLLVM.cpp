@@ -301,8 +301,13 @@ struct StartDMATransferOp2DLowering
 
           Value sourceStride =
               sourceDescriptor.stride(builder, loc, sourceStrides.size() - 1);
+          sourceStride = rewriter.create<LLVM::MulOp>(
+              op->getLoc(), sourceStride, elementSize);
           Value destStride =
               destDescriptor.stride(builder, loc, destStrides.size() - 1);
+          destStride = rewriter.create<LLVM::MulOp>(op->getLoc(), destStride,
+                                                    elementSize);
+
           Value outerLoopSize =
               sourceDescriptor.size(builder, loc, shape.size() - 1);
           return {builder
