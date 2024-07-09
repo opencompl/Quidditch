@@ -125,7 +125,7 @@ struct StartDMATransferOp1DLowering
     Value source = sourceDescriptor.bufferPtr(
         rewriter, op->getLoc(), *getTypeConverter(), op.getSource().getType());
     Value dest = destDescriptor.bufferPtr(
-        rewriter, op->getLoc(), *getTypeConverter(), op.getSource().getType());
+        rewriter, op->getLoc(), *getTypeConverter(), op.getDest().getType());
 
     MemRefType sourceMemRef = op.getSource().getType();
     SmallVector<Value> dynamicSizes;
@@ -238,7 +238,7 @@ struct StartDMATransferOp2DLowering
     Value source = sourceDescriptor.bufferPtr(
         rewriter, op->getLoc(), *getTypeConverter(), op.getSource().getType());
     Value dest = destDescriptor.bufferPtr(
-        rewriter, op->getLoc(), *getTypeConverter(), op.getSource().getType());
+        rewriter, op->getLoc(), *getTypeConverter(), op.getDest().getType());
 
     Value elementSize = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(),
