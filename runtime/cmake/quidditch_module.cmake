@@ -120,7 +120,6 @@ function(quidditch_module)
   list(APPEND _COMPILER_ARGS "--iree-llvmcpu-static-library-output-path=${_O_LLVM_FILE_NAME}")
 
   list(APPEND _COMPILER_ARGS "--output-format=vm-c")
-  list(APPEND _COMPILER_ARGS "--iree-flow-trace-dispatch-tensors")
   list(APPEND _COMPILER_ARGS "--iree-vm-target-index-bits=32")
   list(APPEND _COMPILER_ARGS "${_MLIR_SRC}")
   list(APPEND _COMPILER_ARGS "-o")
