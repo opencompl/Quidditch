@@ -63,8 +63,10 @@ func.func @test5(%arg0 : memref<2x4xf32>, %arg1 : memref<2x4xf32, strided<[8, 1]
   // CHECK: %[[ARG1_OFFSET:.*]] = llvm.mlir.zero
   // CHECK: %[[ARG1_ADJUSTED:.*]] = llvm.getelementptr %[[ARG1_PTR]][%[[ARG1_OFFSET]]]
 
-  // CHECK: %[[ARG0_STRIDE:.*]] = llvm.extractvalue %[[ARG0]][4, 0]
-  // CHECK: %[[ARG1_STRIDE:.*]] = llvm.extractvalue %[[ARG1]][4, 0]
+  // CHECK: %[[ARG0_STRIDE_N:.*]] = llvm.extractvalue %[[ARG0]][4, 0]
+  // CHECK: %[[ARG0_STRIDE:.*]] = llvm.mul %[[ARG0_STRIDE_N]], %[[ELEMENT_WIDTH]]
+  // CHECK: %[[ARG1_STRIDE_N:.*]] = llvm.extractvalue %[[ARG1]][4, 0]
+  // CHECK: %[[ARG1_STRIDE:.*]] = llvm.mul %[[ARG1_STRIDE_N]], %[[ELEMENT_WIDTH]]
   // CHECK: %[[DIM0:.*]] = llvm.extractvalue %[[ARG0]][3, 0]
   // CHECK: llvm.call @snrt_dma_start_2d(%[[ARG1_ADJUSTED]], %[[ARG0_ADJUSTED]], %[[INNER_SIZE]], %[[ARG1_STRIDE]], %[[ARG0_STRIDE]], %[[DIM0]])
   %0 = quidditch_snitch.start_dma_transfer from %arg0 : memref<2x4xf32> to %arg1 : memref<2x4xf32, strided<[8, 1], offset: 0>>
@@ -105,8 +107,10 @@ func.func @test6(%arg0 : memref<3x2x4xf32>, %arg1 : memref<3x2x4xf32, strided<[1
   // CHECK: %[[ARG1_OFFSET1:.*]] = llvm.add %[[ARG1_OFFSET]], %[[MUL]]
   // CHECK: %[[ARG1_ADJUSTED:.*]] = llvm.getelementptr %[[ARG1_PTR]][%[[ARG1_OFFSET1]]]
 
-  // CHECK: %[[ARG0_STRIDE:.*]] = llvm.extractvalue %[[ARG0]][4, 1]
-  // CHECK: %[[ARG1_STRIDE:.*]] = llvm.extractvalue %[[ARG1]][4, 1]
+  // CHECK: %[[ARG0_STRIDE_N:.*]] = llvm.extractvalue %[[ARG0]][4, 1]
+  // CHECK: %[[ARG0_STRIDE:.*]] = llvm.mul %[[ARG0_STRIDE_N]], %[[ELEMENT_WIDTH]]
+  // CHECK: %[[ARG1_STRIDE_N:.*]] = llvm.extractvalue %[[ARG1]][4, 1]
+  // CHECK: %[[ARG1_STRIDE:.*]] = llvm.mul %[[ARG1_STRIDE_N]], %[[ELEMENT_WIDTH]]
   // CHECK: %[[DIM1:.*]] = llvm.extractvalue %[[ARG0]][3, 1]
   // CHECK: %[[RES:.*]] = llvm.call @snrt_dma_start_2d(%[[ARG1_ADJUSTED]], %[[ARG0_ADJUSTED]], %[[INNER_SIZE]], %[[ARG1_STRIDE]], %[[ARG0_STRIDE]], %[[DIM1]])
   // CHECK: scf.yield %[[RES]]
@@ -136,8 +140,10 @@ func.func @dynamic_strides(%arg0 : memref<2x4xf32>, %arg1 : memref<2x4xf32, stri
   // CHECK: %[[ARG1_OFFSET:.*]] = llvm.mlir.zero
   // CHECK: %[[ARG1_ADJUSTED:.*]] = llvm.getelementptr %[[ARG1_PTR]][%[[ARG1_OFFSET]]]
 
-  // CHECK: %[[ARG0_STRIDE:.*]] = llvm.extractvalue %[[ARG0]][4, 0]
-  // CHECK: %[[ARG1_STRIDE:.*]] = llvm.extractvalue %[[ARG1]][4, 0]
+  // CHECK: %[[ARG0_STRIDE_N:.*]] = llvm.extractvalue %[[ARG0]][4, 0]
+  // CHECK: %[[ARG0_STRIDE:.*]] = llvm.mul %[[ARG0_STRIDE_N]], %[[ELEMENT_WIDTH]]
+  // CHECK: %[[ARG1_STRIDE_N:.*]] = llvm.extractvalue %[[ARG1]][4, 0]
+  // CHECK: %[[ARG1_STRIDE:.*]] = llvm.mul %[[ARG1_STRIDE_N]], %[[ELEMENT_WIDTH]]
   // CHECK: %[[DIM0:.*]] = llvm.extractvalue %[[ARG0]][3, 0]
   // CHECK: llvm.call @snrt_dma_start_2d(%[[ARG1_ADJUSTED]], %[[ARG0_ADJUSTED]], %[[INNER_SIZE]], %[[ARG1_STRIDE]], %[[ARG0_STRIDE]], %[[DIM0]])
   %0 = quidditch_snitch.start_dma_transfer from %arg0 : memref<2x4xf32> to %arg1 : memref<2x4xf32, strided<[?, 1], offset: 0>>
