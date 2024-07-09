@@ -16,7 +16,14 @@ func.func @test(%arg0 : memref<?xf32>, %arg1 : memref<?xf32>) -> !quidditch_snit
 
 // CHECK-LABEL: @test2
 func.func @test2(%arg0 : memref<?xf32>, %arg1 : memref<?xf32, strided<[1], offset: ?>>) -> !quidditch_snitch.dma_token {
-  // CHECK: llvm.call @snrt_dma_start_1d(
+  // CHECK: %[[ARG0_PTR:.*]] = llvm.extractvalue %[[ARG0:.*]][1]
+  // CHECK: %[[ARG1_ALIGNED_PTR:.*]] = llvm.extractvalue %[[ARG1:.*]][1]
+  // CHECK: %[[ARG1_OFFSET:.*]] = llvm.extractvalue %[[ARG1]][2]
+  // CHECK: %[[ARG1_PTR:.*]] = llvm.getelementptr %[[ARG1_ALIGNED_PTR]][%[[ARG1_OFFSET]]]
+  // CHECK: %[[ARG0_SIZE:.*]] = llvm.extractvalue %[[ARG0]][3, 0]
+  // CHECK: %[[GEP:.*]] = llvm.getelementptr %{{.*}}[%[[ARG0_SIZE]]]
+  // CHECK: %[[SIZE:.*]] = llvm.ptrtoint %[[GEP]]
+  // CHECK: %[[R:.*]] = llvm.call @snrt_dma_start_1d(%[[ARG1_PTR]], %[[ARG0_PTR]], %[[SIZE]])
   %0 = quidditch_snitch.start_dma_transfer from %arg0 : memref<?xf32> to %arg1 : memref<?xf32, strided<[1], offset: ?>>
   // CHECK: llvm.call @snrt_dma_start_1d(
   %1 = quidditch_snitch.start_dma_transfer from %arg1 : memref<?xf32, strided<[1], offset: ?>> to %arg0 : memref<?xf32>
@@ -67,11 +74,13 @@ func.func @test5(%arg0 : memref<2x4xf32>, %arg1 : memref<2x4xf32, strided<[8, 1]
 // CHECK-LABEL: @test6
 // CHECK-SAME: %[[ARG0_M:[[:alnum:]]+]]
 // CHECK-SAME: %[[ARG1_M:[[:alnum:]]+]]
-func.func @test6(%arg0 : memref<3x2x4xf32>, %arg1 : memref<3x2x4xf32, strided<[16, 8, 1], offset: 0>>) -> !quidditch_snitch.dma_token {
+func.func @test6(%arg0 : memref<3x2x4xf32>, %arg1 : memref<3x2x4xf32, strided<[16, 8, 1], offset: 2>>) -> !quidditch_snitch.dma_token {
   // CHECK: %[[ARG0:.*]] = builtin.unrealized_conversion_cast %[[ARG0_M]]
   // CHECK: %[[ARG1:.*]] = builtin.unrealized_conversion_cast %[[ARG1_M]]
   // CHECK: %[[ARG0_PTR:.*]] = llvm.extractvalue %[[ARG0]][1]
-  // CHECK: %[[ARG1_PTR:.*]] = llvm.extractvalue %[[ARG1]][1]
+  // CHECK: %[[ARG1_ALIGNED_PTR:.*]] = llvm.extractvalue %[[ARG1]][1]
+  // CHECK: %[[ARG1_OFFSET:.*]] = llvm.mlir.constant(2 : index)
+  // CHECK: %[[ARG1_PTR:.*]] = llvm.getelementptr %[[ARG1_ALIGNED_PTR]][%[[ARG1_OFFSET]]]
 
   // CHECK: %[[ELEMENT_WIDTH:.*]] = llvm.mlir.constant(4 : i32)
   // CHECK: %[[CONT_ELEMENTS:.*]] = llvm.mlir.constant(4 : i32)
@@ -103,7 +112,7 @@ func.func @test6(%arg0 : memref<3x2x4xf32>, %arg1 : memref<3x2x4xf32, strided<[1
   // CHECK: scf.yield %[[RES]]
 
   // CHECK: builtin.unrealized_conversion_cast %[[LOOP]]
-  %0 = quidditch_snitch.start_dma_transfer from %arg0 : memref<3x2x4xf32> to %arg1 : memref<3x2x4xf32, strided<[16, 8, 1], offset: 0>>
+  %0 = quidditch_snitch.start_dma_transfer from %arg0 : memref<3x2x4xf32> to %arg1 : memref<3x2x4xf32, strided<[16, 8, 1], offset: 2>>
   return %0 : !quidditch_snitch.dma_token
 }
 
