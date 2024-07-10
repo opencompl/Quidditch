@@ -1,8 +1,14 @@
 import argparse
-
+import os
+import random
 import torch
 import torch.nn as nn
 from iree.turbine import aot
+
+seed = 1234
+random.seed(seed)
+torch.manual_seed(seed)
+os.environ['PYTHONHASHSEED'] = str(seed)
 
 WIN_LEN = 0.02
 HOP_FRAC = 0.5
