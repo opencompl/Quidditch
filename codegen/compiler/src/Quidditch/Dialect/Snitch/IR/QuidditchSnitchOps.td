@@ -86,7 +86,7 @@ def QuidditchSnitch_MicrokernelFenceOp : QuidditchSnitch_Op<"microkernel_fence">
 }
 
 def QuidditchSnitch_CopyTensorOp : QuidditchSnitch_Op<"copy_tensor",
-  [SameOperandsAndResultType, NoMemoryEffect,
+  [SameOperandsAndResultType, Pure,
    DeclareOpInterfaceMethods<BufferizableOpInterface,
     ["resultBufferizesToMemoryWrite", "bufferizesToMemoryRead",
      "bufferizesToMemoryWrite", "getAliasingValues", "getBufferType",
