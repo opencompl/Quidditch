@@ -195,7 +195,10 @@ public:
         .addPass([] {
           return quidditch::createTensorTilePass(
               {quidditch::TilingLevel::Thread});
-        });
+        })
+        .addPass(createCanonicalizerPass)
+        .addPass(createCSEPass)
+        .addPass(createLoopInvariantCodeMotionPass);
 
     BufferizationOptions::AllocationFn allocationFn =
         [](OpBuilder &builder, Location loc, MemRefType memRefType,
