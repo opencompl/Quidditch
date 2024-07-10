@@ -158,6 +158,26 @@ applyTileAndFuseToEachRoot(RewriterBase &rewriter,
           });
       tilingOptions.setLoopType(scf::SCFTilingOptions::LoopType::ForOp);
       break;
+    case TilingLevel::L1:
+      tilingOptions.setTileSizeComputationFunction(
+          [&](OpBuilder &builder, auto &&...) {
+            SmallVector<OpFoldResult> result;
+
+            SmallVector<int64_t> l1Tiles(
+                getLoweringConfig<quidditch::Snitch::LoweringConfigAttr>(
+                    tilingInterfaceOp)
+                    .getL1Tiles());
+            for (int64_t value : l1Tiles)
+              result.push_back(builder.getIndexAttr(value));
+
+            size_t numLoops = tilingInterfaceOp.getLoopIteratorTypes().size();
+            while (result.size() < numLoops)
+              result.push_back(builder.getIndexAttr(0));
+
+            return result;
+          });
+      tilingOptions.setLoopType(scf::SCFTilingOptions::LoopType::ForOp);
+      break;
     }
 
     scf::SCFTileAndFuseOptions tileAndFuseOptions;
@@ -214,6 +234,7 @@ void TensorTile::runOnOperation() {
   case TilingLevel::Thread:
     funcOp->walk([&](TilingInterface target) { targetOps.insert(target); });
     break;
+  case TilingLevel::L1:
   case TilingLevel::Reduction:
     funcOp->walk([&](TilingInterface target) {
       if (auto loweringConfig =

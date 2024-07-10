@@ -12,7 +12,33 @@
 #define GET_ATTRDEF_CLASSES
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchAttrs.cpp.inc"
 
+using namespace mlir;
 using namespace quidditch::Snitch;
+
+static ArrayRef<int64_t> dropTrailingZeros(ArrayRef<int64_t> array) {
+  while (!array.empty()) {
+    if (array.back() != 0)
+      return array;
+
+    array = array.drop_back();
+  }
+  return array;
+}
+
+//===----------------------------------------------------------------------===//
+// LoweringConfigAttr::Builders
+//===----------------------------------------------------------------------===//
+
+LoweringConfigAttr LoweringConfigAttr::get(MLIRContext *context,
+                                           ArrayRef<int64_t> workgroupTiles,
+                                           ArrayRef<int64_t> l1Tiles) {
+  return Base::get(context, dropTrailingZeros(workgroupTiles),
+                   dropTrailingZeros(l1Tiles));
+}
+
+//===----------------------------------------------------------------------===//
+// QuidditchSnitchDialect
+//===----------------------------------------------------------------------===//
 
 void QuidditchSnitchDialect::initialize() {
   addOperations<

@@ -16,6 +16,29 @@ def QuidditchSnitch_L1EncodingAttr : QuidditchSnitch_Attr<"L1Encoding"> {
   }];
 }
 
+def TileSizeList : OptionalArrayRefParameter<"int64_t"> {
+  let parser = [{
+    [&]() -> mlir::FailureOr<llvm::SmallVector<int64_t>> {
+      if ($_parser.parseLSquare())
+        return mlir::failure();
+
+      if (succeeded($_parser.parseOptionalRSquare()))
+        return llvm::SmallVector<int64_t>();
+
+      auto result
+        = mlir::FieldParser<llvm::SmallVector<int64_t>>::parse($_parser);
+      if (mlir::failed(result) || $_parser.parseRSquare())
+        return mlir::failure();
+
+      return result;
+    }()
+  }];
+
+  let printer = [{
+    $_printer << "[" << $_self << "]"
+  }];
+}
+
 def QuidditchSnitch_LoweringConfigAttr : QuidditchSnitch_Attr<"LoweringConfig",
   [DeclareAttrInterfaceMethods<IREECodegen_LoweringConfigAttrInterface, [
     "getWorkgroupTileSizes",
@@ -28,11 +51,21 @@ def QuidditchSnitch_LoweringConfigAttr : QuidditchSnitch_Attr<"LoweringConfig",
   }];
 
   let parameters = (ins
-    ArrayRefParameter<"int64_t">:$workgroup_tiles
+    TileSizeList:$workgroup_tiles,
+    TileSizeList:$l1_tiles
   );
 
+  let builders = [
+    AttrBuilder<(ins
+      CArg<"llvm::ArrayRef<int64_t>", "{}">:$workgroupTiles,
+      CArg<"llvm::ArrayRef<int64_t>", "{}">:$l1Tiles
+    )>
+  ];
+
+  let skipDefaultBuilders = 1;
+
   let assemblyFormat = [{
-    struct(params)
+    `<` struct(params) `>`
   }];
 }
 

@@ -2,7 +2,6 @@
 
 using namespace mlir;
 using namespace quidditch::Snitch;
-using namespace mlir::iree_compiler;
 
 //===----------------------------------------------------------------------===//
 // LoweringConfigAttr::LoweringConfigAttrInterface

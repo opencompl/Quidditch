@@ -187,6 +187,9 @@ public:
         })
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
+        .addPass([] {
+          return quidditch::createTensorTilePass({quidditch::TilingLevel::L1});
+        })
         .addPass(quidditch::Snitch::createPromoteOperandsToL1Pass)
         // TODO: Fuse scf.forall after.
         .addPass([] {
