@@ -186,19 +186,7 @@ LogicalResult CallMicrokernelOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// CopyTensorOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult CopyTensorOp::fold(FoldAdaptor adaptor) {
-  if (auto source = getCopy().getDefiningOp<CopyTensorOp>()) {
-    getCopyMutable().set(source.getCopy());
-    return getResult();
-  }
-  return nullptr;
-}
-
-//===----------------------------------------------------------------------===//
-// CopyTensorOp::BufferizableOpInterface
+// StartTensorCopyOp::BufferizableOpInterface
 //===----------------------------------------------------------------------===//
 
 /// Returns whether 'copy' is already in L1 memory.
@@ -217,7 +205,7 @@ isInL1Memory(Value copy,
   return isa_and_nonnull<L1EncodingAttr>(copyType->getMemorySpace());
 }
 
-bool CopyTensorOp::resultBufferizesToMemoryWrite(
+bool StartTensorCopyOp::resultBufferizesToMemoryWrite(
     OpResult opResult, const bufferization::AnalysisState &state) {
   assert(opResult == getResult() && "no other result");
 
@@ -231,7 +219,7 @@ bool CopyTensorOp::resultBufferizesToMemoryWrite(
   return !*matches;
 }
 
-bool CopyTensorOp::bufferizesToMemoryRead(
+bool StartTensorCopyOp::bufferizesToMemoryRead(
     OpOperand &opOperand, const bufferization::AnalysisState &state) {
   assert(opOperand == getCopyMutable() && "have only one operand");
 
@@ -244,7 +232,7 @@ bool CopyTensorOp::bufferizesToMemoryRead(
   return !*result;
 }
 
-bool CopyTensorOp::bufferizesToMemoryWrite(
+bool StartTensorCopyOp::bufferizesToMemoryWrite(
     OpOperand &opOperand, const bufferization::AnalysisState &) {
   assert(opOperand == getCopyMutable() && "have only one operand");
 
@@ -252,9 +240,8 @@ bool CopyTensorOp::bufferizesToMemoryWrite(
   return false;
 }
 
-AliasingValueList
-CopyTensorOp::getAliasingValues(OpOperand &opOperand,
-                                const bufferization::AnalysisState &state) {
+AliasingValueList StartTensorCopyOp::getAliasingValues(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
   assert(opOperand == getCopyMutable() && "have only one operand");
 
   std::optional<bool> result = isInL1Memory(getCopy(), state.getOptions());
@@ -270,7 +257,7 @@ CopyTensorOp::getAliasingValues(OpOperand &opOperand,
   return {};
 }
 
-bool CopyTensorOp::bufferizesToAllocation(Value value) {
+bool StartTensorCopyOp::bufferizesToAllocation(Value value) {
   assert(value == getResult() && "have only one result");
 
   if (isInL1Memory(getCopy()) == true)
@@ -281,8 +268,9 @@ bool CopyTensorOp::bufferizesToAllocation(Value value) {
 }
 
 FailureOr<BaseMemRefType>
-CopyTensorOp::getBufferType(Value value, const BufferizationOptions &options,
-                            SmallVector<Value> &invocationStack) {
+StartTensorCopyOp::getBufferType(Value value,
+                                 const BufferizationOptions &options,
+                                 SmallVector<Value> &invocationStack) {
   assert(value == getResult() && "have only one result");
 
   bool contained = llvm::is_contained(invocationStack, value);
@@ -297,8 +285,9 @@ CopyTensorOp::getBufferType(Value value, const BufferizationOptions &options,
       getResult().getType(), L1EncodingAttr::get(getContext()));
 }
 
-LogicalResult CopyTensorOp::bufferize(RewriterBase &rewriter,
-                                      const BufferizationOptions &options) {
+LogicalResult
+StartTensorCopyOp::bufferize(RewriterBase &rewriter,
+                             const BufferizationOptions &options) {
   if (use_empty()) {
     rewriter.eraseOp(*this);
     return success();
@@ -318,7 +307,9 @@ LogicalResult CopyTensorOp::bufferize(RewriterBase &rewriter,
     return failure();
 
   if (*result) {
-    replaceOpWithBufferizedValues(rewriter, getOperation(), *copyBuffer);
+    Value token = rewriter.create<CompletedTokenOp>(getLoc());
+    replaceOpWithBufferizedValues(rewriter, getOperation(),
+                                  {*copyBuffer, token});
     return success();
   }
 
@@ -341,12 +332,77 @@ LogicalResult CopyTensorOp::bufferize(RewriterBase &rewriter,
   if (failed(alloc))
     return failure();
 
-  if (failed(options.createMemCpy(rewriter, getLoc(), *copyBuffer, *alloc)))
-    return failure();
+  Value token =
+      rewriter.create<StartDMATransferOp>(getLoc(), *copyBuffer, *alloc);
 
   // Replace op.
-  replaceOpWithBufferizedValues(rewriter, getOperation(), *alloc);
+  replaceOpWithBufferizedValues(rewriter, getOperation(), {*alloc, token});
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// WaitForTensorCopyOp::BufferizableOpInterface
+//===----------------------------------------------------------------------===//
+
+bool WaitForTensorCopyOp::mustBufferizeInPlace(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  return true;
+}
+
+bool WaitForTensorCopyOp::bufferizesToMemoryRead(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  if (opOperand == getTransferTensorMutable())
+    return false;
+
+  if (opOperand == getCopyMutable())
+    return true;
+
+  llvm_unreachable("unknown operand");
+}
+
+bool WaitForTensorCopyOp::bufferizesToMemoryWrite(
+    OpOperand &opOperand, const bufferization::AnalysisState &) {
+  if (opOperand == getTransferTensorMutable())
+    return true;
+
+  if (opOperand == getCopyMutable())
+    return false;
+
+  llvm_unreachable("unknown operand");
+}
+
+AliasingValueList WaitForTensorCopyOp::getAliasingValues(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  if (opOperand == getCopyMutable())
+    return {};
+
+  if (opOperand == getTransferTensorMutable())
+    return {{getResult(), BufferRelation::Equivalent, /*isDefinite=*/true}};
+
+  llvm_unreachable("unknown operand");
+}
+
+LogicalResult
+WaitForTensorCopyOp::bufferize(RewriterBase &rewriter,
+                               const BufferizationOptions &options) {
+  FailureOr<Value> transferTensorBuffer =
+      getBuffer(rewriter, getTransferTensor(), options);
+  if (failed(transferTensorBuffer))
+    return failure();
+
+  rewriter.create<WaitForDMATransfersOp>(getLoc(), getToken());
+  replaceOpWithBufferizedValues(rewriter, getOperation(),
+                                *transferTensorBuffer);
+  return success();
+}
+
+bool WaitForTensorCopyOp::isNotConflicting(
+    OpOperand *uRead, OpOperand *uWrite,
+    const bufferization::AnalysisState &state) {
+  if (*uRead == getCopyMutable() && *uWrite == getTransferTensorMutable())
+    return true;
+
+  return false;
 }
 
 //===----------------------------------------------------------------------===//

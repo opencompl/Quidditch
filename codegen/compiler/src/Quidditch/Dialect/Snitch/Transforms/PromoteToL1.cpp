@@ -48,9 +48,13 @@ void PromoteOperandsToL1::runOnOperation() {
 
     auto builder = OpBuilder(computeOp);
     for (TypedValue<RankedTensorType> value : nonL1Uses) {
-      auto copyOp = builder.create<CopyTensorOp>(computeOp.getLoc(),
-                                                 /*copy=*/value);
-      value.replaceAllUsesExcept(copyOp, copyOp);
+      auto copyOp = builder.create<StartTensorCopyOp>(computeOp.getLoc(),
+                                                      /*copy=*/value);
+      auto waitOp = builder.create<WaitForTensorCopyOp>(
+          computeOp.getLoc(), copyOp.getResult(), copyOp.getToken(),
+          /*copy=*/value);
+      value.replaceAllUsesExcept(waitOp.getResult(),
+                                 SmallPtrSet<Operation *, 2>{copyOp, waitOp});
     }
   });
 }
@@ -64,9 +68,12 @@ void PromoteAllocsToL1::runOnOperation() {
     }
 
     OpBuilder builder(tensorOp);
-    Value replacement =
-        builder.create<CopyTensorOp>(tensorOp.getLoc(), tensorOp);
-    tensorOp.replaceAllUsesWith(replacement);
+    auto copyOp = builder.create<StartTensorCopyOp>(tensorOp.getLoc(),
+                                                    tensorOp.getCopy());
+    auto waitOp = builder.create<WaitForTensorCopyOp>(
+        tensorOp.getLoc(), copyOp.getResult(), copyOp.getToken(),
+        /*copy=*/tensorOp.getCopy());
+    tensorOp.replaceAllUsesWith(waitOp.getResult());
     tensorOp.erase();
   });
 }

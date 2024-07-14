@@ -85,28 +85,72 @@ def QuidditchSnitch_MicrokernelFenceOp : QuidditchSnitch_Op<"microkernel_fence">
   }];
 }
 
-def QuidditchSnitch_CopyTensorOp : QuidditchSnitch_Op<"copy_tensor",
-  [SameOperandsAndResultType, Pure,
+def QuidditchSnitch_StartTensorCopyOp : QuidditchSnitch_Op<"start_tensor_copy",
+  [AllTypesMatch<["copy", "result"]>, Pure,
    DeclareOpInterfaceMethods<BufferizableOpInterface,
     ["resultBufferizesToMemoryWrite", "bufferizesToMemoryRead",
      "bufferizesToMemoryWrite", "getAliasingValues", "getBufferType",
       "bufferize", "bufferizesToAllocation"]>]> {
 
   let description = [{
-    Operation performing a copy of a tensor to L1 memory space.
+    Operation starting a copy of a tensor to L1 memory space returning it as
+    a new tensor.
+    The contained values of the tensor in an unspecified state.
+    See `wait_for_tensor_copy` to transform the tensor value into a state
+    equal to `$copy`.
+
     This operation is a noop if `$copy` and `$result` are already in L1 and
     bufferization can elide the copy.
   }];
 
   let arguments = (ins AnyRankedTensor:$copy);
 
-  let results = (outs AnyRankedTensor:$result);
+  let results = (outs
+    AnyRankedTensor:$result,
+    QuidditchSnitch_DMATokenType:$token
+  );
 
   let assemblyFormat = [{
     $copy `to` `L1` `:` type($copy) attr-dict
   }];
+}
 
-  let hasFolder = 1;
+def QuidditchSnitch_WaitForTensorCopyOp : QuidditchSnitch_Op<"wait_for_tensor_copy",
+  [AllTypesMatch<["transfer_tensor", "result", "copy"]>, Pure,
+   DeclareOpInterfaceMethods<BufferizableOpInterface,
+    ["bufferizesToMemoryRead", "bufferizesToMemoryWrite", "getAliasingValues",
+     "bufferize", "mustBufferizeInPlace", "isNotConflicting"]>]> {
+
+  let description = [{
+    Operation asserting that a previous `start_tensor_copy` operation has finished.
+    Unless `token` is the result of an `completed_token` operation,
+    `transfer_tensor` and `token` must at runtime be a token and tensor yielded
+    by a `start_tensor_copy` operation and `copy` the original tensor used in
+    `start_tensor_copy`.
+
+    Once this operation returns, the returned tensor's values are guaranteed
+    equal to the `copy` operand and in L1 memory.
+
+    Note: The additional `copy` operand is given as it is effectively read by
+    this operation.
+    This additionally guarantees that the bufferization frame work does not
+    perform a write to the underlying buffer of `copy` while the transfer is
+    in progress.
+  }];
+
+  let arguments = (ins
+    AnyRankedTensor:$transfer_tensor,
+    QuidditchSnitch_DMATokenType:$token,
+    AnyRankedTensor:$copy
+  );
+
+  let results = (outs
+    AnyRankedTensor:$result
+  );
+
+  let assemblyFormat = [{
+    `of` $copy `to` $transfer_tensor `using` $token `:` type($transfer_tensor) attr-dict
+  }];
 }
 
 def FlatI8MemRef : ConfinedType<MemRefOf<[I8]>, [HasStaticShapePred,

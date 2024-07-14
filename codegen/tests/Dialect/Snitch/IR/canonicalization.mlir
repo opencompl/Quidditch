@@ -36,16 +36,6 @@ func.func @identical_argument(%arg0 : i32) {
   return
 }
 
-// CHECK-LABEL: @double_copy
-// CHECK-SAME: %[[ARG0:[[:alnum:]]+]]
-func.func @double_copy(%arg0 : tensor<32xf64>) -> tensor<32xf64> {
-  // CHECK-NEXT: %[[R:.*]] = quidditch_snitch.copy_tensor %[[ARG0]] to L1
-  %0 = quidditch_snitch.copy_tensor %arg0 to L1 : tensor<32xf64>
-  %1 = quidditch_snitch.copy_tensor %0 to L1 : tensor<32xf64>
-  // CHECK-NEXT: return %[[R]]
-  return %1 : tensor<32xf64>
-}
-
 // CHECK-LABEL: @wait_gets_removed
 func.func @wait_gets_removed() {
   // CHECK-NEXT: return
