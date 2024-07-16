@@ -27,17 +27,14 @@ iree_cc_library(
 iree_cc_library(
         NAME
         ConvertSnitchToLLVM
-        HDRS
-        "Passes.h"
-        "Passes.h.inc"
         SRCS
         "ConvertSnitchToLLVM.cpp"
         DEPS
-        ::PassesIncGen
         Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
         MLIRAnalysis
         MLIRIR
         MLIRLLVMCommonConversion
         MLIRLLVMDialect
+        MLIRSCFDialect
         MLIRTransforms
 )

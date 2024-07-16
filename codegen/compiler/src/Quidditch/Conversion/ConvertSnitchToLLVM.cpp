@@ -1,8 +1,5 @@
-#include "Passes.h"
+#include "ConvertSnitchToLLVM.h"
 
-#include "mlir/Analysis/DataLayoutAnalysis.h"
-#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
-#include "mlir/Conversion/LLVMCommon/LoweringOptions.h"
 #include "mlir/Conversion/LLVMCommon/MemRefBuilder.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
@@ -12,22 +9,6 @@
 
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h"
-
-namespace quidditch {
-#define GEN_PASS_DEF_CONVERTSNITCHTOLLVMPASS
-#include "Quidditch/Conversion/Passes.h.inc"
-} // namespace quidditch
-
-namespace {
-class ConvertSnitchToLLVM
-    : public quidditch::impl::ConvertSnitchToLLVMPassBase<ConvertSnitchToLLVM> {
-public:
-  using Base::Base;
-
-protected:
-  void runOnOperation() override;
-};
-} // namespace
 
 using namespace mlir;
 using namespace quidditch::Snitch;
@@ -345,33 +326,31 @@ struct WaitForDMATransfersOpLowering
     for (Value iter : llvm::drop_begin(adaptor.getTokens()))
       current = rewriter.create<LLVM::UMaxOp>(op->getLoc(), current, iter);
 
-    // Creating yummy dialect soup here. This hackily relies on IREE's
-    // ConvertToLLVM lowering the scf in one shot.
-    rewriter.create<scf::WhileOp>(
-        op->getLoc(), /*resultTypes=*/TypeRange(),
-        /*operands=*/ValueRange(),
-        [&](OpBuilder &builder, Location loc, ValueRange) {
-          Value lastCompleted =
-              builder
-                  .create<LLVM::InlineAsmOp>(
-                      loc, /*res=*/builder.getI32Type(),
-                      /*operands=*/ValueRange(),
-                      // dmstati $0, 0
-                      // opcode6=0x2b, func3=0, func7=0b100, rd=$0, rs1=zero,
-                      // rs2=imm5(0)
-                      ".insn r 0x2b, 0, 0b100, $0, zero, zero\n",
-                      /*constraints=*/"=r",
-                      /*has_side_effects=*/true, /*is_align_stack=*/false,
-                      /*asm_dialect=*/nullptr, /*operand_attrs=*/nullptr)
-                  .getRes();
-          Value notDone = builder.create<LLVM::ICmpOp>(
-              loc, LLVM::ICmpPredicate::ult, lastCompleted, current);
-          builder.create<scf::ConditionOp>(loc, notDone, ValueRange());
-        },
-        [](OpBuilder &builder, Location loc, ValueRange) {
-          builder.create<scf::YieldOp>(loc);
-        });
+    Block *prev = op->getBlock();
+    Block *body = rewriter.splitBlock(prev, op->getIterator());
+    Block *after = rewriter.splitBlock(body, op->getNextNode()->getIterator());
+    rewriter.setInsertionPointToEnd(prev);
+    rewriter.create<LLVM::BrOp>(op->getLoc(), body);
 
+    rewriter.setInsertionPointToEnd(body);
+    Value lastCompleted =
+        rewriter
+            .create<LLVM::InlineAsmOp>(
+                op->getLoc(), /*res=*/rewriter.getI32Type(),
+                /*operands=*/ValueRange(),
+                // dmstati $0, 0
+                // opcode6=0x2b, func3=0, func7=0b100, rd=$0, rs1=zero,
+                // rs2=imm5(0)
+                ".insn r 0x2b, 0, 0b100, $0, zero, zero\n",
+                /*constraints=*/"=r",
+                /*has_side_effects=*/true, /*is_align_stack=*/false,
+                /*asm_dialect=*/nullptr, /*operand_attrs=*/nullptr)
+            .getRes();
+    Value notDone = rewriter.create<LLVM::ICmpOp>(
+        op->getLoc(), LLVM::ICmpPredicate::ult, lastCompleted, current);
+    rewriter.create<LLVM::CondBrOp>(op->getLoc(), notDone, body, after);
+
+    rewriter.setInsertionPointToStart(after);
     rewriter.eraseOp(op);
     return success();
   }
@@ -438,11 +417,12 @@ struct MicrokernelFenceOpLowering : ConvertOpToLLVMPattern<MicrokernelFenceOp> {
 };
 
 struct CallMicrokernelOpLowering : ConvertOpToLLVMPattern<CallMicrokernelOp> {
-  SymbolTable &symbolTable;
+  mutable SymbolTable symbolTable;
 
-  CallMicrokernelOpLowering(SymbolTable &symbolTable,
+  CallMicrokernelOpLowering(SymbolTable symbolTable,
                             const LLVMTypeConverter &converter)
-      : ConvertOpToLLVMPattern(converter), symbolTable(symbolTable) {}
+      : ConvertOpToLLVMPattern(converter), symbolTable(std::move(symbolTable)) {
+  }
 
   LogicalResult
   matchAndRewrite(CallMicrokernelOp op, OpAdaptor adaptor,
@@ -521,19 +501,15 @@ struct ClusterIndexOpLowering : ConvertOpToLLVMPattern<ClusterIndexOp> {
 
 } // namespace
 
-void ConvertSnitchToLLVM::runOnOperation() {
+void quidditch::populateSnitchToLLVMConversionPatterns(
+    mlir::ModuleOp moduleOp, LLVMTypeConverter &typeConverter,
+    RewritePatternSet &patterns) {
 
-  const auto &dataLayoutAnalysis = getAnalysis<DataLayoutAnalysis>();
-  LowerToLLVMOptions options(&getContext(),
-                             dataLayoutAnalysis.getAtOrAbove(getOperation()));
-  // TODO: This is horribly hardcoded when it shouldn't be.
-  options.overrideIndexBitwidth(32);
-  LLVMTypeConverter typeConverter(&getContext(), options, &dataLayoutAnalysis);
   typeConverter.addConversion([](DMATokenType token) {
     return IntegerType::get(token.getContext(), 32);
   });
 
-  auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
+  auto builder = OpBuilder::atBlockEnd(moduleOp.getBody());
   auto ptrType = builder.getType<LLVM::LLVMPointerType>();
   IntegerType i32 = builder.getI32Type();
   IntegerType sizeT = i32;
@@ -554,20 +530,12 @@ void ConvertSnitchToLLVM::runOnOperation() {
       LLVM::LLVMFunctionType::get(i32, ArrayRef<Type>{}));
   clusterCoreIndex->setAttr("hal.import.bitcode", builder.getUnitAttr());
 
-  SymbolTable symbolTable(getOperation());
-  RewritePatternSet patterns(&getContext());
   patterns.insert<L1MemoryViewOpLowering, CompletedTokenOpLowering,
                   BarrierOpLowering, MicrokernelFenceOpLowering,
                   WaitForDMATransfersOpLowering>(typeConverter);
   patterns.insert<StartDMATransferOp1DLowering>(dmaStart1D, typeConverter);
   patterns.insert<StartDMATransferOp2DLowering>(dmaStart2D, typeConverter);
   patterns.insert<ClusterIndexOpLowering>(clusterCoreIndex, typeConverter);
-  patterns.insert<CallMicrokernelOpLowering>(symbolTable, typeConverter);
-
-  LLVMConversionTarget target(getContext());
-  target.markUnknownOpDynamicallyLegal([](auto) { return true; });
-  target.addIllegalDialect<QuidditchSnitchDialect>();
-  if (failed(
-          applyPartialConversion(getOperation(), target, std::move(patterns))))
-    signalPassFailure();
+  patterns.insert<CallMicrokernelOpLowering>(SymbolTable(moduleOp),
+                                             typeConverter);
 }
