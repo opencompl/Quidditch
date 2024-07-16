@@ -49,6 +49,11 @@ def RemoveTrivialLoopsPass
 
 }
 
-def ConvertToLLVMPass : Pass<"quidditch-convert-to-llvm", "mlir::ModuleOp">;
+def ConvertToLLVMPass : Pass<"quidditch-convert-to-llvm", "mlir::ModuleOp"> {
+  let dependentDialects = [
+    "mlir::LLVM::LLVMDialect",
+    "mlir::scf::SCFDialect",
+  ];
+}
 
 #endif

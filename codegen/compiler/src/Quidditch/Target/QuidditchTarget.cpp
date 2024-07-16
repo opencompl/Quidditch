@@ -276,7 +276,6 @@ public:
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass);
 
-    modulePassManager.addPass(quidditch::createConvertSnitchToLLVMPass());
     modulePassManager.addPass(quidditch::createConvertToLLVMPass());
     modulePassManager.addPass(createReconcileUnrealizedCastsPass());
     // We rely on MLIR symbol visibility being correct after this point and
