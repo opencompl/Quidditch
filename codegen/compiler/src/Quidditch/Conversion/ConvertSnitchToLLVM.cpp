@@ -331,19 +331,47 @@ struct StartDMATransferOp2DLowering
 struct WaitForDMATransfersOpLowering
     : ConvertOpToLLVMPattern<WaitForDMATransfersOp> {
 
-  LLVM::LLVMFuncOp waitFunc;
-
-  WaitForDMATransfersOpLowering(LLVM::LLVMFuncOp waitFunc,
-                                const LLVMTypeConverter &converter)
-      : ConvertOpToLLVMPattern(converter), waitFunc(waitFunc) {}
+  using ConvertOpToLLVMPattern<WaitForDMATransfersOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
   matchAndRewrite(WaitForDMATransfersOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // TODO: This should wait for only a specific transfer not all.
-    //    for (Value token : adaptor.getTokens())
-    //      rewriter.create<LLVM::CallOp>(op->getLoc(), waitFunc, token);
-    rewriter.create<LLVM::CallOp>(op->getLoc(), waitFunc, ValueRange());
+    if (adaptor.getTokens().empty()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+    Value current = adaptor.getTokens().front();
+    for (Value iter : llvm::drop_begin(adaptor.getTokens()))
+      current = rewriter.create<LLVM::UMaxOp>(op->getLoc(), current, iter);
+
+    // Creating yummy dialect soup here. This hackily relies on IREE's
+    // ConvertToLLVM lowering the scf in one shot.
+    rewriter.create<scf::WhileOp>(
+        op->getLoc(), /*resultTypes=*/TypeRange(),
+        /*operands=*/ValueRange(),
+        [&](OpBuilder &builder, Location loc, ValueRange) {
+          Value lastCompleted =
+              builder
+                  .create<LLVM::InlineAsmOp>(
+                      loc, /*res=*/builder.getI32Type(),
+                      /*operands=*/ValueRange(),
+                      // dmstati $0, 0
+                      // opcode6=0x2b, func3=0, func7=0b100, rd=$0, rs1=zero,
+                      // rs2=imm5(0)
+                      ".insn r 0x2b, 0, 0b100, $0, zero, zero\n",
+                      /*constraints=*/"=r",
+                      /*has_side_effects=*/true, /*is_align_stack=*/false,
+                      /*asm_dialect=*/nullptr, /*operand_attrs=*/nullptr)
+                  .getRes();
+          Value notDone = builder.create<LLVM::ICmpOp>(
+              loc, LLVM::ICmpPredicate::ult, lastCompleted, current);
+          builder.create<scf::ConditionOp>(loc, notDone, ValueRange());
+        },
+        [](OpBuilder &builder, Location loc, ValueRange) {
+          builder.create<scf::YieldOp>(loc);
+        });
+
     rewriter.eraseOp(op);
     return success();
   }
@@ -521,15 +549,6 @@ void ConvertSnitchToLLVM::runOnOperation() {
           i32, ArrayRef<Type>{ptrType, ptrType, sizeT, sizeT, sizeT, sizeT}));
   dmaStart2D->setAttr("hal.import.bitcode", builder.getUnitAttr());
 
-  // TODO: This should wait for only a specific transfer not all.
-  //       This is currently bugged in the snitch_cluster repo and potentially
-  //       the hardware.
-  auto dmaWait = builder.create<LLVM::LLVMFuncOp>(
-      builder.getUnknownLoc(), "snrt_dma_wait_all",
-      LLVM::LLVMFunctionType::get(builder.getType<LLVM::LLVMVoidType>(),
-                                  ArrayRef<Type>{}));
-  dmaWait->setAttr("hal.import.bitcode", builder.getUnitAttr());
-
   auto clusterCoreIndex = builder.create<LLVM::LLVMFuncOp>(
       builder.getUnknownLoc(), "snrt_cluster_core_idx",
       LLVM::LLVMFunctionType::get(i32, ArrayRef<Type>{}));
@@ -538,10 +557,10 @@ void ConvertSnitchToLLVM::runOnOperation() {
   SymbolTable symbolTable(getOperation());
   RewritePatternSet patterns(&getContext());
   patterns.insert<L1MemoryViewOpLowering, CompletedTokenOpLowering,
-                  BarrierOpLowering, MicrokernelFenceOpLowering>(typeConverter);
+                  BarrierOpLowering, MicrokernelFenceOpLowering,
+                  WaitForDMATransfersOpLowering>(typeConverter);
   patterns.insert<StartDMATransferOp1DLowering>(dmaStart1D, typeConverter);
   patterns.insert<StartDMATransferOp2DLowering>(dmaStart2D, typeConverter);
-  patterns.insert<WaitForDMATransfersOpLowering>(dmaWait, typeConverter);
   patterns.insert<ClusterIndexOpLowering>(clusterCoreIndex, typeConverter);
   patterns.insert<CallMicrokernelOpLowering>(symbolTable, typeConverter);
 
