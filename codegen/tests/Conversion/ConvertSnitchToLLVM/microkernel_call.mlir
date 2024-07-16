@@ -1,10 +1,10 @@
-// RUN: quidditch-opt %s --quidditch-convert-snitch-to-llvm | FileCheck %s
+// RUN: quidditch-opt %s --quidditch-convert-to-llvm | FileCheck %s
 
 // CHECK-LABEL: @test
-func.func @test(%arg0 : memref<32xi8, strided<[1], offset: ?>>) {
-  // CHECK: %[[ARG0:.*]] = builtin.unrealized_conversion_cast
-  // CHECK: %[[ALIGN_PTR:.*]] = llvm.extractvalue %[[ARG0]][1]
-  // CHECK: %[[OFFSET:.*]] = llvm.extractvalue %[[ARG0]][2]
+// CHECK-SAME: %[[ALLOC_PTR:[[:alnum:]]+]]
+// CHECK-SAME: %[[ALIGN_PTR:[[:alnum:]]+]]
+// CHECK-SAME: %[[OFFSET:[[:alnum:]]+]]
+func.func private @test(%arg0 : memref<32xi8, strided<[1], offset: ?>>) {
   // CHECK: %[[GEP:.*]] = llvm.getelementptr %[[ALIGN_PTR]][%[[OFFSET]]]
   // CHECK: llvm.call @name(%[[GEP]])
   quidditch_snitch.call_microkernel "name"(%arg0) : memref<32xi8, strided<[1], offset: ?>> [{

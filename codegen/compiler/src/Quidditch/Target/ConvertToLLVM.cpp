@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "Quidditch/Conversion/ConvertSnitchToLLVM.h"
+#include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "iree/compiler/Codegen/LLVMCPU/DispatchABI.h"
 #include "iree/compiler/Codegen/LLVMCPU/PassDetail.h"
 #include "iree/compiler/Codegen/LLVMCPU/Passes.h"
@@ -985,7 +987,9 @@ void ConvertToLLVMPass::runOnOperation() {
   LowerToLLVMOptions options(&getContext(),
                              dataLayoutAnalysis.getAtOrAbove(module));
   options.dataLayout = llvm::DataLayout(dataLayoutStr);
-  options.overrideIndexBitwidth(options.dataLayout.getPointerSizeInBits());
+  // TODO: Have a consistent way to express index size and adaptor patterns
+  // to respect it (also in tests).
+  options.overrideIndexBitwidth(32);
   LLVMTypeConverter typeConverter(&getContext(), options, &dataLayoutAnalysis);
 
   RewritePatternSet patterns(&getContext());
@@ -1032,6 +1036,7 @@ void ConvertToLLVMPass::runOnOperation() {
   populateVectorToLLVMMatrixConversionPatterns(typeConverter, patterns);
   populateVectorToLLVMConversionPatterns(typeConverter, patterns, false);
   populateReconcileUnrealizedCastsPatterns(patterns);
+  populateSnitchToLLVMConversionPatterns(module, typeConverter, patterns);
 
   HALDispatchABI abi(&typeConverter);
   // clang-format off
@@ -1053,7 +1058,8 @@ void ConvertToLLVMPass::runOnOperation() {
   target.addLegalOp<ModuleOp>();
   target.addIllegalDialect<func::FuncDialect, mlir::arith::ArithDialect,
                            IREE::Util::UtilDialect, IREE::HAL::HALDialect,
-                           math::MathDialect, tosa::TosaDialect>();
+                           math::MathDialect, tosa::TosaDialect,
+                           Snitch::QuidditchSnitchDialect>();
 
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
     signalPassFailure();
