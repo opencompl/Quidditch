@@ -49,4 +49,6 @@ def RemoveTrivialLoopsPass
 
 }
 
+def ConvertToLLVMPass : Pass<"quidditch-convert-to-llvm", "mlir::ModuleOp">;
+
 #endif
