@@ -21,6 +21,7 @@ iree_cc_library(
         "Passes.h"
         "Passes.h.inc"
         SRCS
+        "ConvertToLLVM.cpp"
         "ConfigureForSnitch.cpp"
         "DisableQuidditchVariant.cpp"
         "LinkExecutables.cpp"

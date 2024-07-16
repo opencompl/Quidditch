@@ -277,7 +277,7 @@ public:
         .addPass(createCSEPass);
 
     modulePassManager.addPass(quidditch::createConvertSnitchToLLVMPass());
-    modulePassManager.addPass(createConvertToLLVMPass({}));
+    modulePassManager.addPass(quidditch::createConvertToLLVMPass());
     modulePassManager.addPass(createReconcileUnrealizedCastsPass());
     // We rely on MLIR symbol visibility being correct after this point and
     // need to mirror the LLVM linkage that was assigned during conversion.
