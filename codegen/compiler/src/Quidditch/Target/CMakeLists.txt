@@ -30,6 +30,7 @@ iree_cc_library(
         "TensorTile.cpp"
         DEPS
         ::PassesIncGen
+        Quidditch::Conversion::ConvertSnitchToLLVM
         Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
         MLIRFuncDialect
         MLIRIR
@@ -45,7 +46,6 @@ iree_cc_library(
         DEPS
         ::Passes
         Quidditch::Conversion::ConvertToRISCV
-        Quidditch::Conversion::ConvertSnitchToLLVM
         Quidditch::Dialect::Snitch::Transforms::Passes
         IREELinalgTransformDialect
         LLVMAnalysis
