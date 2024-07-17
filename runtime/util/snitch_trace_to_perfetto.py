@@ -9,7 +9,8 @@ import sys
 import typing
 from abc import ABC, abstractmethod
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, field
 
 CYCLE_REGEX = re.compile(r"\s*([0-9]+) ([0-9]+)\s+[0-9]+\s+(0x[0-9a-fz]+)\s+DASM\(([0-9a-fz]+)\)\s*#;(.*)")
 
@@ -25,10 +26,21 @@ class Instruction:
             instance.raw_encoding = raw_encoding
             return instance
 
+        candidate = None
         opcode = raw_encoding & 0x7f
         for subclass in cls.__subclasses__():
             if opcode in subclass.OP_CODES:
-                return subclass(raw_encoding)
+                if candidate is None:
+                    candidate = subclass(raw_encoding)
+                else:
+                    # Use the most derived instruction.
+                    new_candidate = subclass(raw_encoding)
+                    if type(candidate).mro().index(Instruction) \
+                            < type(new_candidate).mro().index(Instruction):
+                        candidate = new_candidate
+
+        if candidate is not None:
+            return candidate
 
         instance = super().__new__(cls)
         instance.raw_encoding = raw_encoding
@@ -37,6 +49,13 @@ class Instruction:
     @property
     def opcode(self) -> int:
         return self.raw_encoding & 0x7f
+
+    @classmethod
+    def read_rs1(cls, state: 'TraceState', signed=False):
+        value = state.cpu_state['opa']
+        if signed:
+            value = _bitpattern_to_signed(value, bitwidth=32)
+        return value
 
 
 class CSRInstruction(Instruction):
@@ -59,11 +78,17 @@ class CSRInstruction(Instruction):
         return self.raw_encoding >> 20
 
 
+def _bitpattern_to_signed(value: int, *, bitwidth: int) -> int:
+    if value >= 2 ** (bitwidth - 1):
+        value -= 2 ** bitwidth
+    return value
+
+
 class RInstruction(Instruction):
     OP_CODES = {0x2b}
 
     def __new__(cls, raw_encoding: int) -> 'RInstruction':
-        if cls is not RInstruction:
+        if cls is not RInstruction and issubclass(cls, RInstruction):
             return super().__new__(cls, raw_encoding)
 
         r_inst = super().__new__(cls, raw_encoding)
@@ -74,10 +99,6 @@ class RInstruction(Instruction):
                 return subclass(raw_encoding)
 
         return r_inst
-
-    @classmethod
-    def read_rs1(cls, state: 'TraceState'):
-        return state.cpu_state['opa']
 
     @classmethod
     def read_rs2(cls, state: 'TraceState'):
@@ -94,6 +115,30 @@ class RInstruction(Instruction):
     @property
     def funct7(self) -> int:
         return (self.raw_encoding >> 25) & 0x7f
+
+
+class IInstruction(Instruction):
+    OP_CODES = {0x2b}
+
+    def __new__(cls, raw_encoding: int) -> 'IInstruction':
+        if cls is not IInstruction and issubclass(cls, IInstruction):
+            return super().__new__(cls, raw_encoding)
+
+        i_inst = super().__new__(cls, raw_encoding)
+        for subclass in cls.__subclasses__():
+            if i_inst.opcode == subclass.OPCODE \
+                    and i_inst.funct3 == subclass.FUNCT3:
+                return subclass(raw_encoding)
+
+        return i_inst
+
+    @property
+    def imm(self):
+        return (self.raw_encoding >> 20) & 0xfff
+
+    @property
+    def funct3(self) -> int:
+        return (self.raw_encoding >> 12) & 0x7
 
 
 class DMSRCInstruction(RInstruction):
@@ -148,6 +193,21 @@ class DMSTATIInstruction(RInstruction):
     FUNCT7 = 0b100
 
     status = RInstruction.rs2_imm5
+
+
+class SCFGWIInstruction(IInstruction):
+    OPCODE = 0x2b
+    FUNCT3 = 0b010
+
+    read_value = IInstruction.read_rs1
+
+    @property
+    def ssr(self):
+        return self.imm & 0x1F
+
+    @property
+    def reg(self):
+        return (self.imm >> 5) & 0x3F
 
 
 class TraceState:
@@ -411,16 +471,82 @@ class BarrierEventGenerator(EventGenerator):
         return result
 
 
+@dataclass
+class _SSRState:
+    bounds: list[int] = field(default_factory=lambda: [0, 0, 0, 0])
+    strides: list[int] = field(default_factory=lambda: [0, 0, 0, 0])
+    repetition: int = 1
+    address: int = 0
+    rank: int = 0
+    write_stream: bool = False
+
+
 class StreamingEvent(DurationEvent):
-    def __init__(self, cycle_start, cycle_duration):
-        super().__init__('streaming', cycle_start, cycle_duration, ['streaming'])
+    def __init__(self, cycle_start, cycle_duration, ssr_states: tuple[_SSRState, _SSRState, _SSRState]):
+        # Post process it to a human-readable format rather than the internal IR of the core that the ASM instructions
+        # deal with.
+        copy = deepcopy(ssr_states)
+        for ssr_state in copy:
+            del ssr_state.bounds[ssr_state.rank:]
+            del ssr_state.strides[ssr_state.rank:]
+
+            # The strides are in a format where they represent the offset that need to be applied when at the end of a
+            # dimension, to get to the next dimension. We want it in the same form as in MLIR where it is the difference
+            # between the increase of 1 in a dimension.
+            size = 0
+            for i in range(len(ssr_state.strides)):
+                ssr_state.strides[i] += size
+                size += ssr_state.strides[i] * ssr_state.bounds[i]
+
+            for i in range(len(ssr_state.bounds)):
+                ssr_state.bounds[i] += 1
+
+        super().__init__('streaming', cycle_start, cycle_duration, ['streaming'], {
+            'SSR State': [
+                {
+                    'bounds': json.dumps(ssr_state.bounds),
+                    'strides in bytes': json.dumps(ssr_state.strides),
+                    'repetition': ssr_state.repetition,
+                    'address': hex(ssr_state.address),
+                    'rank': ssr_state.rank,
+                    'is a write stream': ssr_state.write_stream
+                }
+                for ssr_state in copy
+            ]
+        })
 
 
 class StreamingEventGenerator(EventGenerator):
     _stream_start_state: TraceState | None = None
+    _ssr_states: tuple[_SSRState, _SSRState, _SSRState]
+    _active_ssr_states: tuple[_SSRState, _SSRState, _SSRState] | None = None
+
+    def __init__(self):
+        super().__init__()
+        self._ssr_states = (_SSRState(), _SSRState(), _SSRState())
 
     def cycle(self, state: TraceState) -> list[StreamingEvent]:
         result = []
+
+        if isinstance(state.instruction, SCFGWIInstruction) and not state.in_fpss_sequencer:
+            ssr_states = self._ssr_states if state.instruction.ssr == 0x1F else (
+                self._ssr_states[state.instruction.ssr],)
+            reg = state.instruction.reg
+            for ssr_state in ssr_states:
+                if reg == 0:
+                    ssr_state.repetition = SCFGWIInstruction.read_value(state)
+                elif 2 <= reg < 6:
+                    ssr_state.bounds[reg - 2] = SCFGWIInstruction.read_value(state)
+                elif 6 <= reg < 10:
+                    ssr_state.strides[reg - 6] = SCFGWIInstruction.read_value(state, signed=True)
+                elif 24 <= reg < 28:
+                    ssr_state.rank = reg - 23
+                    ssr_state.write_stream = False
+                    ssr_state.address = SCFGWIInstruction.read_value(state)
+                elif 28 <= reg < 32:
+                    ssr_state.rank = reg - 27
+                    ssr_state.write_stream = True
+                    ssr_state.address = SCFGWIInstruction.read_value(state)
 
         if not isinstance(state.instruction, CSRInstruction) or state.instruction.csr != 0x7c0:
             return result
@@ -430,11 +556,14 @@ class StreamingEventGenerator(EventGenerator):
         if state.instruction.is_csrrsi:
             if self._stream_start_state is None:
                 self._stream_start_state = state
+                self._active_ssr_states = deepcopy(self._ssr_states)
         elif state.instruction.is_csrrci and state.in_fpss_sequencer:
-            if self._stream_start_state is not None:
+            if self._stream_start_state is not None and self._active_ssr_states is not None:
                 result.append(StreamingEvent(self._stream_start_state.clock_cycle,
-                                             state.clock_cycle - self._stream_start_state.clock_cycle))
+                                             state.clock_cycle - self._stream_start_state.clock_cycle,
+                                             self._active_ssr_states))
 
+            self._active_ssr_states = None
             self._stream_start_state = None
 
         return result
