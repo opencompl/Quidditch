@@ -37,13 +37,15 @@ static void removeComputeOps(FunctionOpInterface dmaCode) {
 static void removeDmaCode(FunctionOpInterface computeCode) {
   SmallVector<Operation *> toDelete;
   computeCode->walk([&](Operation *operation) {
-    if (isa<WaitForDMATransfersOp, StartDMATransferOp>(operation))
-      toDelete.push_back(operation);
+    if (isa<WaitForDMATransfersOp>(operation))
+      operation->erase();
+    if (isa<StartDMATransferOp>(operation)) {
+      OpBuilder builder(operation);
+      operation->replaceAllUsesWith(
+          builder.create<CompletedTokenOp>(operation->getLoc()));
+      operation->erase();
+    }
   });
-  for (Operation *op : toDelete) {
-    op->dropAllUses();
-    op->erase();
-  }
 }
 
 static void insertBarriers(FunctionOpInterface function) {

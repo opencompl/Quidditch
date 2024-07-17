@@ -5,7 +5,7 @@
 // CHECK-SAME: %[[B:[[:alnum:]]+]]: memref<32xf32>
 // CHECK-SAME: attributes
 // CHECK-SAME: quidditch_snitch.dma_specialization = @[[DMA_SPECIALIZATION:([[:alnum:]]|\$|_)+]]
-func.func @test(%a : memref<32xf32>, %b : memref<32xf32>) {
+func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
   %view = quidditch_snitch.l1_memory_view -> memref<512xi8>
   %c0 = arith.constant 0 : index
   %c256 = arith.constant 256 : index
@@ -16,8 +16,10 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>) {
 
   // CHECK-NEXT: quidditch_snitch.microkernel_fence
   // CHECK-NEXT: quidditch_snitch.barrier
+  // CHECK-NEXT: quidditch_snitch.completed_token
   // CHECK-NEXT: quidditch_snitch.microkernel_fence
   // CHECK-NEXT: quidditch_snitch.barrier
+  // CHECK-NEXT: quidditch_snitch.completed_token
   // CHECK-NEXT: quidditch_snitch.barrier
   quidditch_snitch.start_dma_transfer from %a : memref<32xf32> to %a_l1 : memref<32xf32>
   %t = quidditch_snitch.start_dma_transfer from %b : memref<32xf32> to %b_l1 : memref<32xf32>
@@ -32,10 +34,30 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>) {
 
   // CHECK-NEXT: quidditch_snitch.microkernel_fence
   // CHECK-NEXT: quidditch_snitch.barrier
-  // CHECK-NEXT: quidditch_snitch.barrier
-  // CHECK-NEXT: return
+  // CHECK-NEXT: quidditch_snitch.completed_token
   %t2 = quidditch_snitch.start_dma_transfer from %b_l1 : memref<32xf32> to %b : memref<32xf32>
+  // CHECK-NEXT: quidditch_snitch.barrier
   quidditch_snitch.wait_for_dma_transfers %t2 : !quidditch_snitch.dma_token
+
+
+  // CHECK: scf.if
+  %r = scf.if %cond -> !quidditch_snitch.dma_token {
+    // CHECK-NEXT: quidditch_snitch.microkernel_fence
+    // CHECK-NEXT: quidditch_snitch.barrier
+    // CHECK-NEXT: %[[C:.*]] = quidditch_snitch.completed_token
+    // CHECK-NEXT: yield %[[C]]
+    %t3 = quidditch_snitch.start_dma_transfer from %b_l1 : memref<32xf32> to %b : memref<32xf32>
+    scf.yield %t3 : !quidditch_snitch.dma_token
+  } else {
+    // CHECK-NEXT: else
+    // CHECK-NEXT: %[[C:.*]] = quidditch_snitch.completed_token
+    // CHECK-NEXT: yield %[[C]]
+    %c = quidditch_snitch.completed_token
+    scf.yield %c : !quidditch_snitch.dma_token
+  }
+  // CHECK: quidditch_snitch.barrier
+  quidditch_snitch.wait_for_dma_transfers %r : !quidditch_snitch.dma_token
+  // CHECK-NEXT: return
   return
 }
 
@@ -56,6 +78,15 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>) {
 // CHECK-NEXT: quidditch_snitch.barrier
 // CHECK-NEXT: quidditch_snitch.start_dma_transfer
 // CHECK-NEXT: quidditch_snitch.wait_for_dma_transfers
+// CHECK-NEXT: quidditch_snitch.barrier
+
+// CHECK-NEXT: scf.if
+// CHECK-NEXT: quidditch_snitch.barrier
+// CHECK-NEXT: quidditch_snitch.start_dma_transfer
+// CHECK-NEXT: yield
+// CHECK-NEXT: else
+// CHECK-NEXT: completed_token
+// CHECK: quidditch_snitch.wait_for_dma_transfers
 // CHECK-NEXT: quidditch_snitch.barrier
 
 // CHECK-NEXT: return
