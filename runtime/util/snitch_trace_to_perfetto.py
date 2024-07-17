@@ -270,6 +270,34 @@ class DurationEvent(Event):
         }
 
 
+class InstantEvent(Event):
+    name: str
+    cycle_occurred: int
+    categories: list[str]
+    args: dict
+
+    def __init__(self, name, cycle_occurred, categories, args=None):
+        if args is None:
+            args = {}
+
+        self.name = name
+        self.cycle_occurred = cycle_occurred
+        self.categories = categories
+        self.args = args
+
+    def to_chrome_tracing(self, hartid: int) -> dict:
+        return {
+            'name': self.name,
+            'ts': self.cycle_occurred,
+            'ph': 'i',
+            'cat': ','.join(self.categories),
+            'pid': 0,
+            'tid': hartid,
+            'args': self.args,
+            's': 't'
+        }
+
+
 class KernelEvent(DurationEvent):
 
     def __init__(self, name, cycle_start, cycle_duration, is_dm_core, origin, metrics):
@@ -340,18 +368,25 @@ class EventGenerator(ABC):
         ...
 
 
-class BarrierEvent(DurationEvent):
+class BarrierWaitEvent(DurationEvent):
     def __init__(self, cycle_start, cycle_duration, pc):
         super().__init__('barrier', cycle_start, cycle_duration, ['barrier'], {
             'program counter': hex(pc)
         })
 
 
+class BarrierUnlockEvent(InstantEvent):
+    def __init__(self, cycle_occurred, pc):
+        super().__init__('barrier unlocked', cycle_occurred, ['barrier'], {
+            'program counter': hex(pc)
+        })
+
+
 class BarrierEventGenerator(EventGenerator):
-    _INSTANT_THRESHOLD = 10
+    _INSTANT_THRESHOLD = 4
     _barrier_start_state: TraceState | None = None
 
-    def cycle(self, state: TraceState) -> list[BarrierEvent]:
+    def cycle(self, state: TraceState) -> list[BarrierWaitEvent]:
         result = []
 
         if self._barrier_start_state is not None:
@@ -359,10 +394,12 @@ class BarrierEventGenerator(EventGenerator):
             if state.pc is None:
                 return result
 
-            # Don't bother for instantly succeeding barriers.
             if state.clock_cycle - self._barrier_start_state.clock_cycle > self._INSTANT_THRESHOLD:
-                result.append(BarrierEvent(self._barrier_start_state.clock_cycle,
-                                           state.clock_cycle - self._barrier_start_state.clock_cycle, state.pc))
+                result.append(BarrierWaitEvent(self._barrier_start_state.clock_cycle,
+                                               state.clock_cycle - self._barrier_start_state.clock_cycle,
+                                               self._barrier_start_state.pc))
+            else:
+                result.append(BarrierUnlockEvent(state.clock_cycle, self._barrier_start_state.pc))
 
             self._barrier_start_state = None
 
@@ -499,6 +536,22 @@ class DMAEventGenerator(EventGenerator):
                     if not is_busy:
                         inner_result += self._in_flight_to_event(state.clock_cycle, self._in_flight)
                         self._in_flight.clear()
+                    return inner_result
+
+                result += self.schedule_writeback(state, write_back)
+            elif instruction.status == 0:
+                def write_back(last_completed):
+                    inner_result = []
+
+                    # Turn all in-flight transfers that have been completed into events.
+                    index = -1
+                    for i, flight in enumerate(self._in_flight):
+                        if flight.transfer_id > last_completed:
+                            break
+                        index = i
+
+                    inner_result += self._in_flight_to_event(state.clock_cycle, self._in_flight[:index + 1])
+                    del self._in_flight[:index + 1]
                     return inner_result
 
                 result += self.schedule_writeback(state, write_back)
