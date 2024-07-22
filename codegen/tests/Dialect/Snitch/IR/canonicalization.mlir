@@ -51,3 +51,43 @@ func.func @noop_transfer(%arg0 : memref<?xf32>) -> !quidditch_snitch.dma_token {
   %0 = quidditch_snitch.start_dma_transfer from %arg0 : memref<?xf32> to %arg0 : memref<?xf32>
   return %0 : !quidditch_snitch.dma_token
 }
+
+// CHECK-LABEL: @pipeline_dead_block_arg(
+func.func @pipeline_dead_block_arg(%tensor : tensor<?xf32>) {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c10 = arith.constant 10 : index
+  // CHECK: pipeline
+  // CHECK-SAME: {
+  quidditch_snitch.pipeline %c0 to %c10 step %c1 {
+  // CHECK: ^{{.*}}(%{{.*}}: index):
+  ^bb0(%iv: index):
+    "test.test"() : () -> ()
+    quidditch_snitch.pipeline_yield %tensor : tensor<?xf32>
+  }, {
+  // CHECK: ^{{.*}}(%{{.*}}: index):
+  ^bb0(%iv: index, %arg0: tensor<?xf32>):
+    quidditch_snitch.pipeline_yield
+  }
+  return
+}
+
+// CHECK-LABEL: @pipeline_invariant(
+func.func @pipeline_invariant(%tensor : tensor<?xf32>) {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c10 = arith.constant 10 : index
+  // CHECK: pipeline
+  // CHECK-SAME: {
+  quidditch_snitch.pipeline %c0 to %c10 step %c1 {
+  // CHECK: ^{{.*}}(%{{.*}}: index):
+  ^bb0(%iv: index):
+    quidditch_snitch.pipeline_yield %tensor : tensor<?xf32>
+  }, {
+  // CHECK: ^{{.*}}(%{{.*}}: index):
+  ^bb0(%iv: index, %arg0: tensor<?xf32>):
+    "test.test"(%arg0) : (tensor<?xf32>) -> ()
+    quidditch_snitch.pipeline_yield
+  }
+  return
+}
