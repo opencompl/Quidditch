@@ -70,3 +70,28 @@ func.func @copy_l1_buffer_dynamic_dims(%arg0 : tensor<?xf32>) -> tensor<?xf32> {
   // CHECK: return %[[R]]
   return %r#0 : tensor<?xf32>
 }
+
+// CHECK-LABEL: @pipeline_op(
+func.func @pipeline_op(%arg0_dim : index) -> tensor<?xf32> {
+  // CHECK-DAG: %[[C0:.*]] = arith.constant 0
+  // CHECK-DAG: %[[C1:.*]] = arith.constant 1
+  // CHECK-DAG: %[[C10:.*]] = arith.constant 10
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c10 = arith.constant 10 : index
+  %arg0 = tensor.empty(%arg0_dim) : tensor<?xf32>
+
+  // CHECK: pipeline %[[C0]] to %[[C10]] step %[[C1]] {
+  %t = quidditch_snitch.pipeline %c0 to %c10 step %c1 inits(%arg0) -> tensor<?xf32> {
+  // CHECK: ^{{.*}}(%[[IV:.*]]: index):
+  ^bb0(%iv: index, %tensor: tensor<?xf32>):
+    // CHECK: quidditch_snitch.pipeline_yield
+    quidditch_snitch.pipeline_yield %tensor : tensor<?xf32>
+  }, {
+  // CHECK: ^{{.*}}(%[[IV:.*]]: index, %{{.*}}: memref<?xf32{{.*}}>):
+  ^bb0(%iv: index, %tensor: tensor<?xf32>):
+    quidditch_snitch.pipeline_yield %tensor : tensor<?xf32>
+  // CHECK-NEXT: }
+  }
+  return %t : tensor<?xf32>
+}

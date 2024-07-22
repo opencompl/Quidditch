@@ -444,3 +444,515 @@ LogicalResult WaitForDMATransfersOp::canonicalize(WaitForDMATransfersOp op,
   rewriter.eraseOp(op);
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// PipelineOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult PipelineOp::verify() {
+  if (getStages().empty())
+    return emitOpError("must have at least one stage");
+
+  for (Region &region : getStages())
+    if (region.getArguments().empty() ||
+        !isa<IndexType>(region.getArgument(0).getType()))
+      return emitOpError(
+          "first block argument of every stage must be of type 'index'");
+
+  if (!hasTensorSemantics())
+    if (!getResults().empty() || !getInitArgs().empty())
+      return emitOpError("bufferized pipeline cannot have any iterables");
+
+  return success();
+}
+
+BlockArgument PipelineOp::getTiedEntryIterArg(OpOperand &operand) {
+  return getTiedEntryIterArg(getTiedResult(operand));
+}
+
+BlockArgument PipelineOp::getTiedEntryIterArg(OpResult opResult) {
+  return getStages().front().getArgument(1 + opResult.getResultNumber());
+}
+
+OpResult PipelineOp::getTiedResult(OpOperand &operand) {
+  return getResults()[operand.getOperandNumber() -
+                      getInitArgs().getBeginOperandIndex()];
+}
+
+mlir::OpOperand &PipelineOp::getTiedYielded(OpResult result) {
+  return getTiedYielded(getTiedEntryIterArg(result));
+}
+
+mlir::OpOperand &PipelineOp::getTiedYielded(BlockArgument argument) {
+  Region *region = argument.getParentRegion();
+  unsigned index = region->getRegionNumber();
+  if (index == 0)
+    index = getStages().size() - 1;
+  else
+    index--;
+
+  return cast<PipelineYieldOp>(getStages()[index].back().getTerminator())
+      .getResultsMutable()[argument.getArgNumber() - 1];
+}
+
+OpOperand &PipelineOp::getTiedInit(BlockArgument argument) {
+  return getInitArgsMutable()[argument.getArgNumber() - 1];
+}
+
+namespace {
+/// Removes block arguments with no uses (excluding the entry block).
+struct DeadBlockArgRemoval : OpRewritePattern<PipelineOp> {
+  using OpRewritePattern<PipelineOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(PipelineOp op,
+                                PatternRewriter &rewriter) const override {
+    bool changed = false;
+    for (Region &region : op.getStages().drop_front())
+      for (BlockArgument arg :
+           llvm::reverse(region.getArguments().drop_front()))
+        if (arg.use_empty()) {
+          changed = true;
+          OpOperand &operand = op.getTiedYielded(arg);
+          rewriter.modifyOpInPlace(operand.getOwner(), [&] {
+            cast<PipelineYieldOp>(operand.getOwner())
+                .getResultsMutable()
+                .erase(operand.getOperandNumber());
+          });
+          rewriter.modifyOpInPlace(
+              op, [&] { region.eraseArgument(arg.getArgNumber()); });
+        }
+
+    return success(changed);
+  }
+};
+
+/// Replace uses of arguments if they are loop invariant.
+struct InvariantArgumentReplacement : OpRewritePattern<PipelineOp> {
+  using OpRewritePattern<PipelineOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(PipelineOp op,
+                                PatternRewriter &rewriter) const override {
+    bool changed = false;
+    for (Region &region : op.getStages())
+      for (BlockArgument arg :
+           llvm::reverse(region.getArguments().drop_front())) {
+        Value yielded = op.getTiedYielded(arg).get();
+        if (!yielded.getParentRegion()->isAncestor(op->getParentRegion()))
+          continue;
+
+        if (&region == &op.getStages().front()) {
+          OpOperand &init = op.getTiedInit(arg);
+          if (yielded != init.get())
+            continue;
+
+          OpResult result = op.getTiedResult(init);
+          if (arg.use_empty() && result.use_empty())
+            continue;
+
+          rewriter.replaceAllUsesWith(result, yielded);
+          changed = true;
+        }
+
+        if (arg.use_empty())
+          continue;
+
+        rewriter.replaceAllUsesWith(arg, yielded);
+        changed = true;
+      }
+
+    return success(changed);
+  }
+};
+
+/// Remove unused results.
+struct DeadResultRemoval : OpRewritePattern<PipelineOp> {
+
+  using OpRewritePattern<PipelineOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(PipelineOp op,
+                                PatternRewriter &rewriter) const override {
+    llvm::BitVector alive(op.getNumResults(), true);
+    for (OpResult result : llvm::reverse(op.getResults())) {
+      if (!result.use_empty())
+        continue;
+
+      BlockArgument argument = op.getTiedEntryIterArg(result);
+      if (!argument.use_empty())
+        continue;
+
+      alive[result.getResultNumber()] = false;
+      OpOperand &operand = op.getTiedYielded(argument);
+      OpOperand &init = op.getTiedInit(argument);
+      rewriter.modifyOpInPlace(operand.getOwner(), [&] {
+        cast<PipelineYieldOp>(operand.getOwner())
+            .getResultsMutable()
+            .erase(operand.getOperandNumber());
+      });
+      rewriter.modifyOpInPlace(op, [&] {
+        argument.getOwner()->eraseArgument(argument.getArgNumber());
+        op.getInitArgsMutable().erase(init.getOperandNumber() -
+                                      op.getInitArgs().getBeginOperandIndex());
+      });
+    }
+
+    if (alive.all())
+      return failure();
+
+    auto newPipeline = rewriter.create<PipelineOp>(
+        op.getLoc(), op.getLowerBound(), op.getUpperBound(), op.getStep(),
+        op.getInitArgs(), op.getStages().size());
+    for (auto [oldRegion, newRegion] :
+         llvm::zip_equal(op.getStages(), newPipeline.getStages()))
+      newRegion.takeBody(oldRegion);
+
+    auto current = newPipeline.getResults().begin();
+    for (OpResult result : op.getResults())
+      if (alive[result.getResultNumber()]) {
+        rewriter.replaceAllUsesWith(result, *current);
+        current++;
+      }
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+/// Move operations from one stage into a later stage if profitable.
+struct MoveSideEffectFreeComputation : OpRewritePattern<PipelineOp> {
+  using OpRewritePattern<PipelineOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(PipelineOp op,
+                                PatternRewriter &rewriter) const override {
+    bool changed = false;
+    for (Region &region : op.getStages().drop_front()) {
+      rewriter.setInsertionPointToStart(&region.front());
+      for (BlockArgument arg : region.getArguments().drop_front()) {
+        if (arg.use_empty())
+          continue;
+
+        // If an implementation is side effect free, only used in a later stage,
+        // and only depends on the index as input operand, move it to the later
+        // stage.
+        // TODO: As is often the case with code motion, this might be very
+        //       opinionated.
+        OpOperand &yieldOperand = op.getTiedYielded(arg);
+        Operation *yield = yieldOperand.getOwner();
+        Value yielded = yieldOperand.get();
+        Operation *def = yielded.getDefiningOp();
+        if (!def || !isPure(def) ||
+            def->getParentRegion() != yield->getParentRegion() ||
+            !llvm::all_of(def->getUsers(),
+                          [&](Operation *user) { return user == yield; }))
+          continue;
+
+        if (!llvm::all_of(def->getOperands(), [&](Value value) {
+              return value == yielded.getParentRegion()->getArgument(0) ||
+                     value.getParentRegion()->isAncestor(op->getParentRegion());
+            }))
+          continue;
+
+        IRMapping mapping;
+        mapping.map(yielded.getParentRegion()->getArgument(0),
+                    arg.getParentRegion()->getArgument(0));
+        rewriter.clone(*def, mapping);
+        rewriter.replaceAllUsesWith(arg, mapping.lookupOrDefault(yielded));
+        changed = true;
+      }
+    }
+
+    return success(changed);
+  }
+};
+} // namespace
+
+void PipelineOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                             MLIRContext *context) {
+  results.insert<DeadBlockArgRemoval, InvariantArgumentReplacement,
+                 DeadResultRemoval, MoveSideEffectFreeComputation>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// PipelineOp::InferTypeOpAdaptor
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+PipelineOp::inferReturnTypes(MLIRContext *context,
+                             std::optional<Location> location, Adaptor adaptor,
+                             SmallVectorImpl<Type> &inferredReturnTypes) {
+  llvm::append_range(inferredReturnTypes, adaptor.getInitArgs().getTypes());
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// PipelineOp::RegionBranchOpInterface
+//===----------------------------------------------------------------------===//
+
+void PipelineOp::getSuccessorRegions(
+    RegionBranchPoint point, SmallVectorImpl<RegionSuccessor> &regions) {
+  auto addRegion = [&](Region &region) {
+    regions.emplace_back(&region, region.getArguments().drop_front());
+  };
+
+  if (point.isParent()) {
+    addRegion(getStages().front());
+    regions.emplace_back(getResults());
+    return;
+  }
+
+  unsigned index = point.getRegionOrNull()->getRegionNumber();
+  if (index + 1 == getStages().size()) {
+    addRegion(getStages().front());
+    regions.emplace_back(getResults());
+    return;
+  }
+
+  addRegion(getStages()[index + 1]);
+}
+
+OperandRange PipelineOp::getEntrySuccessorOperands(RegionBranchPoint point) {
+  return getInitArgs();
+}
+
+//===----------------------------------------------------------------------===//
+// PipelineOp::BufferizableOpInterface
+//===----------------------------------------------------------------------===//
+
+bool PipelineOp::bufferizesToMemoryRead(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  assert(llvm::is_contained(getInitArgsMutable(), opOperand));
+
+  return state.isValueRead(getTiedEntryIterArg(opOperand));
+}
+
+bool PipelineOp::bufferizesToMemoryWrite(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  assert(llvm::is_contained(getInitArgsMutable(), opOperand));
+
+  // TODO: This is cargo-culted from 'scf.for'. The impact is unclear.
+  return true;
+}
+
+AliasingValueList
+PipelineOp::getAliasingValues(OpOperand &opOperand,
+                              const bufferization::AnalysisState &state) {
+  assert(llvm::is_contained(getInitArgsMutable(), opOperand));
+
+  return {{getTiedResult(opOperand), BufferRelation::Equivalent}};
+}
+
+FailureOr<BaseMemRefType>
+PipelineOp::getBufferType(Value value,
+                          const bufferization::BufferizationOptions &options,
+                          SmallVector<Value> &invocationStack) {
+  if (auto opResult = dyn_cast<OpResult>(value))
+    return bufferization::getBufferType(getTiedEntryIterArg(opResult), options,
+                                        invocationStack);
+
+  auto argument = cast<BlockArgument>(value);
+  if (argument.getParentRegion()->getRegionNumber() != 0) {
+    Value yielded = getTiedYielded(argument).get();
+    if (auto memRef = dyn_cast<BaseMemRefType>(yielded.getType()))
+      return memRef;
+
+    return bufferization::getBufferType(yielded, options, invocationStack);
+  }
+
+  FailureOr<BaseMemRefType> initType = bufferization::getBufferType(
+      getTiedInit(argument).get(), options, invocationStack);
+  if (failed(initType))
+    return failure();
+
+  if (llvm::is_contained(invocationStack, argument))
+    return initType;
+
+  Value yieldedValue = getTiedYielded(argument).get();
+  BaseMemRefType yieldedType = dyn_cast<BaseMemRefType>(yieldedValue.getType());
+  if (!yieldedType) {
+    FailureOr<BaseMemRefType> maybeYieldedType =
+        bufferization::getBufferType(yieldedValue, options, invocationStack);
+    if (failed(maybeYieldedType))
+      return failure();
+
+    yieldedType = *maybeYieldedType;
+  }
+
+  if (yieldedType == initType)
+    return yieldedType;
+
+  return getMemRefTypeWithFullyDynamicLayout(
+      cast<TensorType>(argument.getType()), yieldedType.getMemorySpace());
+}
+
+static FailureOr<SmallVector<Value>>
+getBuffers(ValueRange values, RewriterBase &rewriter,
+           const bufferization::BufferizationOptions &options) {
+  SmallVector<Value> result;
+  for (Value old : values) {
+    if (!isa<TensorType>(old.getType())) {
+      result.push_back(old);
+      continue;
+    }
+
+    FailureOr<Value> maybeBuffer =
+        bufferization::getBuffer(rewriter, old, options);
+    if (failed(maybeBuffer))
+      return failure();
+
+    // TODO: MemRef types may not exactly match and require a cast.
+    result.push_back(*maybeBuffer);
+  }
+  return std::move(result);
+}
+
+LogicalResult
+PipelineOp::bufferize(RewriterBase &rewriter,
+                      const bufferization::BufferizationOptions &options) {
+  FailureOr<SmallVector<Value>> inits =
+      getBuffers(getInitArgs(), rewriter, options);
+  if (failed(inits))
+    return failure();
+
+  // TODO: Cast inits to buffer type of block arg if necessary.
+
+  SmallVector<SmallVector<Value>> perRegionReplacements;
+  auto newPipelineOp = rewriter.create<PipelineOp>(
+      getLoc(), getLowerBound(), getUpperBound(), getStep(),
+      /*inits=*/ValueRange(), getStages().size());
+  for (auto [oldRegion, newRegion] :
+       llvm::zip_equal(getStages(), newPipelineOp.getStages())) {
+    Block &newBlock = newRegion.emplaceBlock();
+    rewriter.setInsertionPointToStart(&newBlock);
+
+    SmallVector<Value> replacements;
+    for (BlockArgument arg : oldRegion.getArguments()) {
+      if (!isa<TensorType>(arg.getType())) {
+        replacements.push_back(
+            newBlock.addArgument(arg.getType(), arg.getLoc()));
+        continue;
+      }
+
+      // Entry regions are special: They can only have tensor block arguments
+      // that are filled from inits and the last stage. After bufferization,
+      // they must disappear entirely.
+      if (oldRegion.getRegionNumber() == 0) {
+        Value init = (*inits)[arg.getArgNumber() - 1];
+        replacements.push_back(
+            rewriter.create<bufferization::ToTensorOp>(init.getLoc(), init));
+        continue;
+      }
+
+      FailureOr<BaseMemRefType> memRef =
+          bufferization::getBufferType(arg, options);
+      if (failed(memRef))
+        return failure();
+
+      BlockArgument newArg = newBlock.addArgument(*memRef, arg.getLoc());
+      replacements.push_back(
+          rewriter.create<bufferization::ToTensorOp>(newArg.getLoc(), newArg));
+    }
+    perRegionReplacements.push_back(std::move(replacements));
+  }
+
+  for (auto [oldRegion, newRegion, replacements] : llvm::zip_equal(
+           getStages(), newPipelineOp.getStages(), perRegionReplacements))
+    rewriter.mergeBlocks(&oldRegion.front(), &newRegion.front(), replacements);
+
+  // Last stage cannot yield anything anymore once bufferized.
+  cast<PipelineYieldOp>(newPipelineOp.getStages().back().back().getTerminator())
+      .getResultsMutable()
+      .clear();
+
+  replaceOpWithBufferizedValues(rewriter, *this, *inits);
+  return success();
+}
+
+bool PipelineOp::isWritable(Value value,
+                            const bufferization::AnalysisState &state) {
+  return true;
+}
+
+bool PipelineOp::mustBufferizeInPlace(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  return true;
+}
+
+AliasingOpOperandList
+PipelineOp::getAliasingOpOperands(Value value,
+                                  const bufferization::AnalysisState &state) {
+  if (auto result = dyn_cast<OpResult>(value))
+    return {{&getTiedInit(getTiedEntryIterArg(result)),
+             BufferRelation::Equivalent}};
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
+// PipelineOp::LoopLikeInterface
+//===----------------------------------------------------------------------===//
+
+SmallVector<Region *> PipelineOp::getLoopRegions() {
+  return llvm::map_to_vector(getStages(),
+                             [](Region &region) { return &region; });
+}
+
+void PipelineOp::moveOutOfLoop(Operation *op) {
+  Block *block = op->getBlock();
+  auto yieldOp = cast<PipelineYieldOp>(block->getTerminator());
+  if (op->getParentRegion() != getStages().back())
+    for (OpOperand &operand : yieldOp.getResultsMutable())
+      if (operand.get().getDefiningOp() == op)
+        yieldOp.getTiedBlockArgument(operand).replaceAllUsesWith(operand.get());
+
+  op->moveBefore(*this);
+}
+
+//===----------------------------------------------------------------------===//
+// PipelineYieldOp
+//===----------------------------------------------------------------------===//
+
+BlockArgument PipelineYieldOp::getTiedBlockArgument(OpOperand &operand) {
+  Region *region = (*this)->getParentRegion();
+  unsigned index = region->getRegionNumber();
+  unsigned next = index + 1;
+  if (next == getParentOp().getStages().size())
+    next = 0;
+
+  return getParentOp().getStages()[next].getArgument(
+      1 + (operand.getOperandNumber() - getResults().getBeginOperandIndex()));
+}
+
+//===----------------------------------------------------------------------===//
+// PipelineYieldOp::BufferizableOpInterface
+//===----------------------------------------------------------------------===//
+
+bool PipelineYieldOp::bufferizesToMemoryRead(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  return true;
+}
+
+bool PipelineYieldOp::bufferizesToMemoryWrite(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  return false;
+}
+
+bool PipelineYieldOp::mustBufferizeInPlace(
+    OpOperand &opOperand, const bufferization::AnalysisState &state) {
+  return true;
+}
+
+AliasingValueList
+PipelineYieldOp::getAliasingValues(OpOperand &opOperand,
+                                   const bufferization::AnalysisState &state) {
+  return {};
+}
+
+LogicalResult
+PipelineYieldOp::bufferize(RewriterBase &rewriter,
+                           const bufferization::BufferizationOptions &options) {
+  FailureOr<SmallVector<Value>> buffers =
+      getBuffers(getResults(), rewriter, options);
+  if (failed(buffers))
+    return failure();
+
+  replaceOpWithNewBufferizedOp<PipelineYieldOp>(rewriter, *this, *buffers);
+  return success();
+}

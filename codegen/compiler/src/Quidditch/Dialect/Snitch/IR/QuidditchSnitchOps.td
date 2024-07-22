@@ -6,6 +6,8 @@ include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchTypes.td"
 include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -240,6 +242,101 @@ def QuidditchSnitch_ClusterIndexOp
 
   let assemblyFormat = [{
     attr-dict
+  }];
+}
+
+def QuidditchSnitch_PipelineOp : QuidditchSnitch_Op<"pipeline",
+  [AllTypesMatch<["init_args", "results"]>,
+   RecursivelySpeculatable, RecursiveMemoryEffects,
+   SingleBlockImplicitTerminator<"quidditch::Snitch::PipelineYieldOp">,
+   InferTypeOpAdaptor,
+   DeclareOpInterfaceMethods<LoopLikeOpInterface,
+    ["moveOutOfLoop"]>,
+   DeclareOpInterfaceMethods<RegionBranchOpInterface,
+    ["getEntrySuccessorOperands"]>,
+   DeclareOpInterfaceMethods<BufferizableOpInterface,
+    ["bufferizesToMemoryRead", "bufferizesToMemoryWrite", "getAliasingValues",
+     "bufferize", "getBufferType", "isWritable", "getAliasingOpOperands",
+     "mustBufferizeInPlace"]>
+]> {
+
+  let description = [{
+    Op representing a loop consisting of different pipelined stages.
+    Every stage in the pipeline is a region containing at least one block
+    argument of type `index` which is the induction variable.
+    The entry region may additionally have input tensors initialized by
+    `init_args` if not yet bufferized.
+    Stages are able to explicitly transfer data from one stage to another
+    using `pipeline_yield` which are then passed onto the block arguments of
+    the next stage following the induction variable.
+
+    No guarantee is given regarding the order of side effects within a stage
+    except:
+    * For a given IV, `Stage[j]` is executed after `Stage[j-1]`.
+    * For a given stage, IV `i` is executed after IV `i-1`.
+
+    Note: Resource allocations performed within a stage may be multiplied by a
+    lowering to support concurrently running stages.
+  }];
+
+  let arguments = (ins
+    Index:$lower_bound,
+    Index:$upper_bound,
+    Index:$step,
+    Variadic<AnyRankedTensor>:$init_args
+  );
+
+  let results = (outs
+    Variadic<AnyRankedTensor>:$results
+  );
+
+  let regions = (region VariadicRegion<SizedRegion<1>>:$stages);
+
+  let assemblyFormat = [{
+    $lower_bound `to` $upper_bound `step` $step (`inits` `(`$init_args^ `)`
+    `->` type($results) )? $stages attr-dict-with-keyword
+  }];
+
+  let hasVerifier = 1;
+  let hasCanonicalizer = 1;
+
+  let extraClassDeclaration = [{
+    mlir::BlockArgument getTiedEntryIterArg(mlir::OpOperand& operand);
+
+    mlir::BlockArgument getTiedEntryIterArg(mlir::OpResult operand);
+
+    mlir::OpResult getTiedResult(mlir::OpOperand& operand);
+
+    mlir::OpOperand& getTiedYielded(mlir::OpResult result);
+
+    mlir::OpOperand& getTiedYielded(mlir::BlockArgument argument);
+
+    mlir::OpOperand& getTiedInit(mlir::BlockArgument argument);
+  }];
+}
+
+def QuidditchSnitch_PipelineYieldOp : QuidditchSnitch_Op<"pipeline_yield",
+  [Pure, HasParent<"PipelineOp">, Terminator, ReturnLike,
+   DeclareOpInterfaceMethods<BufferizableOpInterface,
+   ["bufferizesToMemoryRead", "bufferizesToMemoryWrite", "getAliasingValues",
+    "bufferize", "mustBufferizeInPlace"]>
+]> {
+  let arguments = (ins
+    Variadic<AnyType>:$results
+  );
+
+  let builders = [
+    OpBuilder<(ins), [{
+      build($_builder, $_state, /*results=*/mlir::ValueRange());
+    }]>
+  ];
+
+  let assemblyFormat = [{
+    ($results `:` type($results)^)? attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+      mlir::BlockArgument getTiedBlockArgument(mlir::OpOperand& operand);
   }];
 }
 
