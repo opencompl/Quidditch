@@ -195,7 +195,7 @@ RUN llvm-profdata merge -output=/root/code.profdata /root/code_*.profraw
 RUN make -C target/snitch_cluster clean-vlt && \
     make -C target/snitch_cluster \
     CLANG_CXXFLAGS="-fprofile-instr-use=/root/code.profdata" \
-    CLANG_LDFLAGS="-static" \
+    CLANG_LDFLAGS="-static" OPT_SLOW="-O1" \
     CFG_OVERRIDE=cfg/fdiv.hjson VLT_USE_LLVM=ON  bin/snitch_cluster.vlt -j$(nproc)
 
 RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
