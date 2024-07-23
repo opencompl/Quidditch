@@ -52,13 +52,15 @@ def QuidditchSnitch_LoweringConfigAttr : QuidditchSnitch_Attr<"LoweringConfig",
 
   let parameters = (ins
     TileSizeList:$workgroup_tiles,
-    TileSizeList:$l1_tiles
+    TileSizeList:$l1_tiles,
+    DefaultValuedParameter<"bool", "false">:$dual_buffer
   );
 
   let builders = [
     AttrBuilder<(ins
       CArg<"llvm::ArrayRef<int64_t>", "{}">:$workgroupTiles,
-      CArg<"llvm::ArrayRef<int64_t>", "{}">:$l1Tiles
+      CArg<"llvm::ArrayRef<int64_t>", "{}">:$l1Tiles,
+      CArg<"bool", "false">:$dualBuffer
     )>
   ];
 

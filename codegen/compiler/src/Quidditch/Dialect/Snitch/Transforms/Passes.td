@@ -74,4 +74,10 @@ def LowerForallOpPass : Pass<"quidditch-lower-forall-op"> {
   ];
 }
 
+def PipelineCopyComputePass : Pass<"quidditch-pipeline-copy-compute"> {
+  let dependentDialects = [
+    "quidditch::Snitch::QuidditchSnitchDialect",
+  ];
+}
+
 #endif
