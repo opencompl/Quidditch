@@ -18,6 +18,7 @@ iree_cc_library(
         "LowerForallOp.cpp"
         "LowerL1Allocations.cpp"
         "LowerPipelineOp.cpp"
+        "PipelineCopyCompute.cpp"
         "PromoteToL1.cpp"
         "SpecializeDMACode.cpp"
         DEPS

@@ -191,6 +191,7 @@ public:
           return quidditch::createTensorTilePass({quidditch::TilingLevel::L1});
         })
         .addPass(quidditch::Snitch::createPromoteOperandsToL1Pass)
+        .addPass(quidditch::Snitch::createPipelineCopyComputePass)
         // TODO: Fuse scf.forall after.
         .addPass([] {
           return quidditch::createTensorTilePass(
@@ -227,7 +228,12 @@ public:
     addIREEPostBufferizationPasses(modulePassManager.nest<func::FuncOp>());
 
     FunctionLikeNest(modulePassManager)
+        .addPass(quidditch::Snitch::createLowerPipelineOpPass)
         .addPass(quidditch::Snitch::createLowerForallOpPass)
+        .addPass(createSCFForLoopCanonicalizationPass)
+        .addPass(createCanonicalizerPass)
+        .addPass(createCSEPass)
+        .addPass(createCanonicalizerPass)
         // TODO: Remove the following pass and plumb support for
         // #hal.descriptor_type memory space through the stack.
         .addPass(createEraseHALDescriptorTypeFromMemRefPass)
