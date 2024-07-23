@@ -17,6 +17,7 @@ iree_cc_library(
         "FormMicrokernels.cpp"
         "LowerForallOp.cpp"
         "LowerL1Allocations.cpp"
+        "LowerPipelineOp.cpp"
         "PromoteToL1.cpp"
         "SpecializeDMACode.cpp"
         DEPS

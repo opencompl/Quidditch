@@ -45,6 +45,12 @@ def LowerL1AllocationsPass : InterfacePass<"quidditch-lower-l1-allocations",
   ];
 }
 
+def LowerPipelineOpPass : Pass<"quidditch-lower-pipeline-op"> {
+  let dependentDialects = [
+    "mlir::scf::SCFDialect",
+  ];
+}
+
 def SpecializeDMACodePass : Pass<"quidditch-specialize-dma-code",
   "mlir::ModuleOp"> {
 
