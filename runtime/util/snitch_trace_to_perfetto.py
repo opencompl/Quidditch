@@ -533,7 +533,7 @@ class StreamingEventGenerator(EventGenerator):
                 self._ssr_states[state.instruction.ssr],)
             reg = state.instruction.reg
             for ssr_state in ssr_states:
-                if reg == 0:
+                if reg == 1:
                     ssr_state.repetition = SCFGWIInstruction.read_value(state)
                 elif 2 <= reg < 6:
                     ssr_state.bounds[reg - 2] = SCFGWIInstruction.read_value(state)
