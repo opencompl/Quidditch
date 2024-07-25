@@ -52,7 +52,7 @@ class Instruction:
 
     @classmethod
     def read_rs1(cls, state: 'TraceState', signed=False):
-        value = state.cpu_state['opa']
+        value = state.raw_cpu_state['opa']
         if signed:
             value = _bitpattern_to_signed(value, bitwidth=32)
         return value
@@ -102,7 +102,7 @@ class RInstruction(Instruction):
 
     @classmethod
     def read_rs2(cls, state: 'TraceState'):
-        return state.cpu_state['opb']
+        return state.raw_cpu_state['opb']
 
     @property
     def rs2_imm5(self):
@@ -216,17 +216,21 @@ class TraceState:
     pc: int | None
     # None if an frep.
     instruction: Instruction | None
-    cpu_state: dict
+    raw_cpu_state: dict
 
     def __init__(self, clock_cycle, pc, op_code, cpu_state):
         self.clock_cycle = clock_cycle
         self.pc = pc
         self.instruction = None if op_code is None else Instruction(op_code)
-        self.cpu_state = cpu_state
+        self.raw_cpu_state = cpu_state
 
     @property
     def in_fpss_sequencer(self):
         return self.pc is None
+
+    @property
+    def stalled(self) -> bool:
+        return bool(self.raw_cpu_state.get('stall'))
 
 
 def get_trace_state(line: str):
@@ -289,8 +293,8 @@ class KernelNameResolver:
             if res is None:
                 return "<unknown-kernel>"
 
-            if not res.cpu_state['stall'] and res.cpu_state['pc_d'] != res.pc + 4:
-                return self.get_name_from_address(res.cpu_state['pc_d'])
+            if not res.stalled and res.raw_cpu_state['pc_d'] != res.pc + 4:
+                return self.get_name_from_address(res.raw_cpu_state['pc_d'])
 
 
 class Event(ABC):
@@ -405,9 +409,9 @@ class EventGenerator(ABC):
         self._acc_callback = []
 
     def schedule_writeback(self, state: TraceState, callback: typing.Callable[[int], list[Event]]) -> list[Event]:
-        if state.cpu_state['write_rd'] and state.cpu_state['rd'] != 0:
+        if state.raw_cpu_state['write_rd'] and state.raw_cpu_state['rd'] != 0:
             # The result is written back in the same cycle.
-            return callback(state.cpu_state['writeback'])
+            return callback(state.raw_cpu_state['writeback'])
 
         # Result will only be assigned at a later cycle (FIFO style).
         self._acc_callback.append(callback)
@@ -417,11 +421,11 @@ class EventGenerator(ABC):
         if not self._acc_callback:
             return []
 
-        if not state.cpu_state['retire_acc'] or state.cpu_state['acc_pid'] == 0:
+        if not state.raw_cpu_state['retire_acc'] or state.raw_cpu_state['acc_pid'] == 0:
             return []
 
         front = self._acc_callback.pop(0)
-        return front(state.cpu_state['acc_pdata_32'])
+        return front(state.raw_cpu_state['acc_pdata_32'])
 
     @abstractmethod
     def cycle(self, state: TraceState) -> list[dict]:
@@ -463,7 +467,7 @@ class BarrierEventGenerator(EventGenerator):
 
             self._barrier_start_state = None
 
-        csr_addr = state.cpu_state.get('csr_addr')
+        csr_addr = state.raw_cpu_state.get('csr_addr')
         if csr_addr != 0x7c2:
             return result
 
@@ -698,8 +702,9 @@ def worker(file: str):
                 raise RuntimeError('Failed to parse trace: ' + l)
 
             for g in generators:
+                if not state.stalled:
+                    events += g.cycle(state)
                 events += g.check_accumulator(state)
-                events += g.cycle(state)
     return events
 
 
