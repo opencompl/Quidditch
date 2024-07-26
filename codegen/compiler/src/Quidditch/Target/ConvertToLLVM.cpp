@@ -1035,7 +1035,6 @@ void ConvertToLLVMPass::runOnOperation() {
   populateVectorToSCFConversionPatterns(patterns);
   populateVectorToLLVMMatrixConversionPatterns(typeConverter, patterns);
   populateVectorToLLVMConversionPatterns(typeConverter, patterns, false);
-  populateReconcileUnrealizedCastsPatterns(patterns);
   populateSnitchToLLVMConversionPatterns(module, typeConverter, patterns);
 
   HALDispatchABI abi(&typeConverter);
