@@ -239,8 +239,9 @@ static iree_status_t quidditch_device_create_command_buffer(
   } else {
     quidditch_device_t* device = quidditch_device_cast(base_device);
     return iree_hal_deferred_command_buffer_create(
-        base_device, mode, command_categories, binding_capacity,
-        &device->large_block_pool, device->host_allocator, out_command_buffer);
+        iree_hal_device_allocator(base_device), mode, command_categories,
+        binding_capacity, &device->large_block_pool, device->host_allocator,
+        out_command_buffer);
   }
 }
 
@@ -340,7 +341,8 @@ static iree_status_t quidditch_device_queue_dealloca(
 
 static iree_status_t quidditch_device_apply_deferred_command_buffers(
     quidditch_device_t* device, iree_host_size_t command_buffer_count,
-    iree_hal_command_buffer_t* const* command_buffers) {
+    iree_hal_command_buffer_t* const* command_buffers,
+    iree_hal_buffer_binding_table_t const* binding_tables) {
   // See if there are any deferred command buffers; this saves us work in cases
   // of pure inline execution.
   bool any_deferred = false;
@@ -361,12 +363,21 @@ static iree_status_t quidditch_device_apply_deferred_command_buffers(
   // if they mixed the two modes together!
   for (iree_host_size_t i = 0; i < command_buffer_count; ++i) {
     iree_hal_command_buffer_t* command_buffer = command_buffers[i];
+    iree_hal_buffer_binding_table_t binding_table =
+        binding_tables ? binding_tables[i]
+                       : iree_hal_buffer_binding_table_empty();
     if (iree_hal_deferred_command_buffer_isa(command_buffer)) {
       iree_hal_command_buffer_t* inline_command_buffer = NULL;
       IREE_RETURN_IF_ERROR(quidditch_command_buffer_initialize(
           (iree_hal_device_t*)device,
           iree_hal_command_buffer_mode(command_buffer) |
-              IREE_HAL_COMMAND_BUFFER_MODE_ALLOW_INLINE_EXECUTION,
+              IREE_HAL_COMMAND_BUFFER_MODE_ONE_SHOT |
+              IREE_HAL_COMMAND_BUFFER_MODE_ALLOW_INLINE_EXECUTION |
+              // NOTE: we need to validate if a binding table is provided as the
+              // bindings were not known when it was originally recorded.
+              (iree_hal_buffer_binding_table_is_empty(binding_table)
+                   ? IREE_HAL_COMMAND_BUFFER_MODE_UNVALIDATED
+                   : 0),
           IREE_HAL_COMMAND_CATEGORY_ANY, IREE_HAL_QUEUE_AFFINITY_ANY,
           /*binding_capacity=*/0, device->host_allocator, storage,
           &inline_command_buffer));
@@ -428,7 +439,8 @@ static iree_status_t quidditch_device_queue_execute(
     const iree_hal_semaphore_list_t wait_semaphore_list,
     const iree_hal_semaphore_list_t signal_semaphore_list,
     iree_host_size_t command_buffer_count,
-    iree_hal_command_buffer_t* const* command_buffers) {
+    iree_hal_command_buffer_t* const* command_buffers,
+    iree_hal_buffer_binding_table_t const* binding_tables) {
   quidditch_device_t* device = quidditch_device_cast(base_device);
 
   // TODO(#4680): there is some better error handling here needed; we should
@@ -444,7 +456,7 @@ static iree_status_t quidditch_device_queue_execute(
   // Run all deferred command buffers - any we could have run inline we already
   // did during recording.
   IREE_RETURN_IF_ERROR(quidditch_device_apply_deferred_command_buffers(
-      device, command_buffer_count, command_buffers));
+      device, command_buffer_count, command_buffers, binding_tables));
 
   // Signal all semaphores now that batch work has completed.
   IREE_RETURN_IF_ERROR(quidditch_semaphore_multi_signal(
