@@ -281,8 +281,19 @@ StartTensorCopyOp::getBufferType(Value value,
   // Unless contained in the invocation stack (where we are free to impose the
   // most optimal layout), we do not really impose a specific layout on the
   // result. Contiguous is a good bet for now.
-  return getMemRefTypeWithStaticIdentityLayout(
-      getResult().getType(), L1EncodingAttr::get(getContext()));
+  SmallVector<int64_t> strides{1};
+  for (int64_t dim :
+       llvm::reverse(cast<TensorType>(value.getType()).getShape().drop_front()))
+    strides.push_back(strides.back() * dim);
+
+  std::reverse(strides.begin(), strides.end());
+  if (strides.size() == 2)
+    if (strides[0] % 2 == 0)
+      strides[0]++;
+
+  auto layout = StridedLayoutAttr::get(value.getContext(), 0, strides);
+  return getMemRefType(getResult(), options, layout,
+                       L1EncodingAttr::get(getContext()));
 }
 
 LogicalResult
