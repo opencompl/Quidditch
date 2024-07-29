@@ -56,4 +56,8 @@ def ConvertToLLVMPass : Pass<"quidditch-convert-to-llvm", "mlir::ModuleOp"> {
   ];
 }
 
+def AvoidBankConflictsPass : Pass<"quidditch-avoid-bank-conflicts"> {
+
+}
+
 #endif

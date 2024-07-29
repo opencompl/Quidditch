@@ -2,8 +2,14 @@ include(CTest)
 
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/test.o
+    COMMAND ${QUIDDITCH_TOOLCHAIN_ROOT}/bin/pulp-as
+    ${CMAKE_CURRENT_LIST_DIR}/test.s --filetype=obj --target-abi=ilp32d
+    --mcpu=snitch -g -o ${CMAKE_CURRENT_BINARY_DIR}/test.o
+    DEPENDS test.s ${QUIDDITCH_TOOLCHAIN_ROOT}/bin/pulp-as)
+
 # Sanity check that our toolchain, emulator etc. work
-add_executable(HelloWorld main.c)
+add_executable(HelloWorld main.c ${CMAKE_CURRENT_BINARY_DIR}/test.o)
 target_link_libraries(HelloWorld snRuntime)
 
 macro(test_executable target_name)
