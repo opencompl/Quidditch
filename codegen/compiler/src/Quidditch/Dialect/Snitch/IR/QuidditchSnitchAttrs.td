@@ -39,8 +39,6 @@ def TileSizeList : OptionalArrayRefParameter<"int64_t"> {
   }];
 }
 
-defvar BankAlignmentList = TileSizeList;
-
 def QuidditchSnitch_LoweringConfigAttr : QuidditchSnitch_Attr<"LoweringConfig",
   [DeclareAttrInterfaceMethods<IREECodegen_LoweringConfigAttrInterface, [
     "getWorkgroupTileSizes",
@@ -55,16 +53,14 @@ def QuidditchSnitch_LoweringConfigAttr : QuidditchSnitch_Attr<"LoweringConfig",
   let parameters = (ins
     TileSizeList:$workgroup_tiles,
     TileSizeList:$l1_tiles,
-    DefaultValuedParameter<"bool", "false">:$dual_buffer,
-    BankAlignmentList:$bank_alignments
+    DefaultValuedParameter<"bool", "false">:$dual_buffer
   );
 
   let builders = [
     AttrBuilder<(ins
       CArg<"llvm::ArrayRef<int64_t>", "{}">:$workgroupTiles,
       CArg<"llvm::ArrayRef<int64_t>", "{}">:$l1Tiles,
-      CArg<"bool", "false">:$dualBuffer,
-      CArg<"llvm::ArrayRef<int64_t>", "{}">:$bankAlignments
+      CArg<"bool", "false">:$dualBuffer
     )>
   ];
 

@@ -21,7 +21,6 @@ iree_cc_library(
         "Passes.h"
         "Passes.h.inc"
         SRCS
-        "AvoidBankConflicts.cpp"
         "ConvertToLLVM.cpp"
         "ConfigureForSnitch.cpp"
         "DisableQuidditchVariant.cpp"

@@ -32,10 +32,9 @@ static ArrayRef<int64_t> dropTrailingZeros(ArrayRef<int64_t> array) {
 LoweringConfigAttr LoweringConfigAttr::get(MLIRContext *context,
                                            ArrayRef<int64_t> workgroupTiles,
                                            ArrayRef<int64_t> l1Tiles,
-                                           bool dualBuffer,
-                                           ArrayRef<int64_t> bankAlignments) {
+                                           bool dualBuffer) {
   return Base::get(context, dropTrailingZeros(workgroupTiles),
-                   dropTrailingZeros(l1Tiles), dualBuffer, bankAlignments);
+                   dropTrailingZeros(l1Tiles), dualBuffer);
 }
 
 //===----------------------------------------------------------------------===//

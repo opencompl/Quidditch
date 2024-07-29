@@ -12,12 +12,6 @@ from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass, field
 
-# Groups:
-# 1: Time in ps
-# 2: Clock cycle
-# 3: Program counter
-# 4: Instruction
-# 5: Processor State as 'dict'.
 CYCLE_REGEX = re.compile(r"\s*([0-9]+) ([0-9]+)\s+[0-9]+\s+(0x[0-9a-fz]+)\s+DASM\(([0-9a-fz]+)\)\s*#;(.*)")
 
 
@@ -57,8 +51,8 @@ class Instruction:
         return self.raw_encoding & 0x7f
 
     @classmethod
-    def read_rs1(cls, state: 'IntegerCoreState', signed=False):
-        value = state.operand_a
+    def read_rs1(cls, state: 'TraceState', signed=False):
+        value = state.raw_cpu_state['opa']
         if signed:
             value = _bitpattern_to_signed(value, bitwidth=32)
         return value
@@ -67,32 +61,21 @@ class Instruction:
 class CSRInstruction(Instruction):
     OP_CODES = {0b1110011}
 
-    def __new__(cls, raw_encoding: int) -> 'CSRInstruction':
-        if cls is not CSRInstruction and issubclass(cls, CSRInstruction):
-            return super().__new__(cls, raw_encoding)
-
-        csr_inst = super().__new__(cls, raw_encoding)
-        for subclass in cls.__subclasses__():
-            if csr_inst.funct3 == subclass.FUNCT3:
-                return subclass(raw_encoding)
-
-        return csr_inst
-
     @property
     def funct3(self) -> int:
         return (self.raw_encoding >> 12) & 0b111
 
     @property
+    def is_csrrsi(self):
+        return self.funct3 == 0b110
+
+    @property
+    def is_csrrci(self):
+        return self.funct3 == 0b111
+
+    @property
     def csr(self):
         return self.raw_encoding >> 20
-
-
-class CSRRSIInstruction(CSRInstruction):
-    FUNCT3 = 0b110
-
-
-class CSRRCIInstruction(CSRInstruction):
-    FUNCT3 = 0b111
 
 
 def _bitpattern_to_signed(value: int, *, bitwidth: int) -> int:
@@ -118,8 +101,8 @@ class RInstruction(Instruction):
         return r_inst
 
     @classmethod
-    def read_rs2(cls, state: 'IntegerCoreState'):
-        return state.operand_b
+    def read_rs2(cls, state: 'TraceState'):
+        return state.raw_cpu_state['opb']
 
     @property
     def rs2_imm5(self):
@@ -227,131 +210,27 @@ class SCFGWIInstruction(IInstruction):
         return (self.imm >> 5) & 0x3F
 
 
-@dataclass
-class IntegerCoreState:
-    pc: int
-    instruction: Instruction
-    _raw_cpu_state: dict
-
-    @property
-    def is_stalled(self) -> bool:
-        """
-        Returns true if the integer core is currently stalled.
-        If stalled, the integer core is not issuing and processing the current
-        instruction.
-        'instruction' will nevertheless be populated with the instruction that
-        will be processed next.
-
-        The integer core state may still be retiring an instruction by writing
-        back to a register from a load or accelerator instruction.
-        """
-        return bool(self._raw_cpu_state['stall'])
-
-    @property
-    def operand_a(self) -> int:
-        """
-
-        :return:
-        """
-        return self._raw_cpu_state['opa']
-
-    @property
-    def operand_b(self) -> int:
-        """
-
-        :return:
-        """
-        return self._raw_cpu_state['opb']
-
-    @property
-    def next_pc(self) -> int:
-        """
-
-        :return:
-        """
-        return self._raw_cpu_state['pc_d']
-
-    @property
-    def writes_to_rd(self) -> bool:
-        """
-
-        :return:
-        """
-        return self._raw_cpu_state['write_rd'] and self._raw_cpu_state['rd'] != 0
-
-    @property
-    def rd_result(self) -> None | int:
-        """
-
-        :return:
-        """
-
-        if not self.writes_to_rd:
-            return None
-        return self._raw_cpu_state['writeback']
-
-    @property
-    def retires_accelerator(self):
-        """
-
-        :return:
-        """
-        return self._raw_cpu_state['retire_acc']
-
-    @property
-    def accelerator_result(self) -> None | int:
-        """
-
-        :return:
-        """
-        if self.retires_accelerator:
-            return self._raw_cpu_state['acc_pdata_32']
-        return None
-
-
-@dataclass
-class FPUState:
-    instruction: Instruction
+class TraceState:
+    clock_cycle: int
+    # PC or None if in FPSS sequencer.
+    pc: int | None
+    # None if an frep.
+    instruction: Instruction | None
     raw_cpu_state: dict
 
-
-@dataclass
-class HartState:
-    clock_cycle: int
-    integer_core: IntegerCoreState | None = None
-    fpu: FPUState | None = None
-
-    @property
-    def executed_integer_instruction(self) -> Instruction | None:
-        """
-
-        :return:
-        """
-        if self.integer_core is None:
-            return None
-        if self.integer_core.is_stalled:
-            return None
-        return self.integer_core.instruction
-
-
-@dataclass
-class VerilatorTraceLine:
-    clock_cycle: int
-    integer_pc: int | None
-    instruction: Instruction | None
-    state: dict
+    def __init__(self, clock_cycle, pc, op_code, cpu_state):
+        self.clock_cycle = clock_cycle
+        self.pc = pc
+        self.instruction = None if op_code is None else Instruction(op_code)
+        self.raw_cpu_state = cpu_state
 
     @property
-    def is_integer_core(self):
-        return self.state['source'] == 0
+    def in_fpss_sequencer(self):
+        return self.pc is None
 
     @property
-    def is_fpu(self):
-        return self.state['source'] == 1
-
-    @property
-    def is_sequencer(self):
-        return self.state['source'] == 2
+    def stalled(self) -> bool:
+        return bool(self.raw_cpu_state.get('stall'))
 
 
 def get_trace_state(line: str):
@@ -371,32 +250,10 @@ def get_trace_state(line: str):
     if op_code == 'zzzzzzzzzzzzzzzz':
         op_code = None
     else:
-        op_code = Instruction(int(op_code, base=16))
+        op_code = int(op_code, base=16)
 
-    return VerilatorTraceLine(int(match.group(2), base=10), pc, op_code,
-                              eval(match.group(5)))
-
-
-def get_hart_state(lines: typing.Iterable[str]):
-    hart_state: HartState | None = None
-    for l in lines:
-        trace = get_trace_state(l)
-        assert trace is not None
-        if hart_state is not None:
-            if hart_state.clock_cycle != trace.clock_cycle:
-                yield hart_state
-                hart_state = HartState(trace.clock_cycle)
-        else:
-            hart_state = HartState(trace.clock_cycle)
-
-        if trace.is_integer_core:
-            hart_state.integer_core = IntegerCoreState(trace.integer_pc, trace.instruction, trace.state)
-
-        if trace.is_fpu:
-            hart_state.fpu = FPUState(trace.instruction, trace.state)
-
-    if hart_state is not None:
-        yield hart_state
+    return TraceState(int(match.group(2), base=10), pc, op_code,
+                      eval(match.group(5)))
 
 
 class KernelNameResolver:
@@ -427,17 +284,17 @@ class KernelNameResolver:
         else:
             return "<unknown-kernel>"
 
-        for index, state in enumerate(get_hart_state(iterator)):
+        for index, l in enumerate(iterator):
             # Give up.
             if index == 100:
                 return "<unknown-kernel>"
 
-            integer_core = state.integer_core
-            if integer_core is None or integer_core.is_stalled:
-                continue
+            res = get_trace_state(l)
+            if res is None:
+                return "<unknown-kernel>"
 
-            if integer_core.next_pc != integer_core.pc + 4:
-                return self.get_name_from_address(integer_core.next_pc)
+            if not res.stalled and res.raw_cpu_state['pc_d'] != res.pc + 4:
+                return self.get_name_from_address(res.raw_cpu_state['pc_d'])
 
 
 class Event(ABC):
@@ -547,35 +404,31 @@ def calculate_sections(inputs: typing.Iterable[typing.IO], elf: str, addr2line: 
 
 
 class EventGenerator(ABC):
+
     def __init__(self):
         self._acc_callback = []
 
-    def schedule_int_writeback(self, state: IntegerCoreState, callback: typing.Callable[[int], list[Event]]) -> list[
-        Event]:
-        write_back = state.rd_result
-        if write_back is not None:
-            return callback(write_back)
+    def schedule_writeback(self, state: TraceState, callback: typing.Callable[[int], list[Event]]) -> list[Event]:
+        if state.raw_cpu_state['write_rd'] and state.raw_cpu_state['rd'] != 0:
+            # The result is written back in the same cycle.
+            return callback(state.raw_cpu_state['writeback'])
 
         # Result will only be assigned at a later cycle (FIFO style).
         self._acc_callback.append(callback)
         return []
 
-    def check_accumulators(self, state: HartState, results: list[Event]):
-        if state.integer_core is not None:
-            if not self._acc_callback:
-                return
+    def check_accumulator(self, state: TraceState):
+        if not self._acc_callback:
+            return []
 
-            acc = state.integer_core.accelerator_result
-            if acc is None:
-                return
+        if not state.raw_cpu_state['retire_acc'] or state.raw_cpu_state['acc_pid'] == 0:
+            return []
 
-            front = self._acc_callback.pop(0)
-            results += front(acc)
+        front = self._acc_callback.pop(0)
+        return front(state.raw_cpu_state['acc_pdata_32'])
 
-
-class ThreadEventGenerator(EventGenerator):
     @abstractmethod
-    def cycle(self, state: HartState, results: list[Event]):
+    def cycle(self, state: TraceState) -> list[dict]:
         ...
 
 
@@ -593,28 +446,33 @@ class BarrierUnlockEvent(InstantEvent):
         })
 
 
-class BarrierEventGenerator(ThreadEventGenerator):
+class BarrierEventGenerator(EventGenerator):
     _INSTANT_THRESHOLD = 4
-    _barrier_start_state: HartState | None = None
+    _barrier_start_state: TraceState | None = None
 
-    def cycle(self, state: HartState, results: list[Event]):
-        instruction = state.executed_integer_instruction
-        if instruction is None:
-            return
+    def cycle(self, state: TraceState) -> list[BarrierWaitEvent]:
+        result = []
 
         if self._barrier_start_state is not None:
+            # In sequencer.
+            if state.pc is None:
+                return result
+
             if state.clock_cycle - self._barrier_start_state.clock_cycle > self._INSTANT_THRESHOLD:
-                results.append(BarrierWaitEvent(self._barrier_start_state.clock_cycle,
-                                                state.clock_cycle - self._barrier_start_state.clock_cycle,
-                                                self._barrier_start_state.integer_core.pc))
+                result.append(BarrierWaitEvent(self._barrier_start_state.clock_cycle,
+                                               state.clock_cycle - self._barrier_start_state.clock_cycle,
+                                               self._barrier_start_state.pc))
             else:
-                results.append(BarrierUnlockEvent(state.clock_cycle, self._barrier_start_state.integer_core.pc))
+                result.append(BarrierUnlockEvent(state.clock_cycle, self._barrier_start_state.pc))
 
             self._barrier_start_state = None
 
-        if isinstance(instruction, CSRInstruction):
-            if instruction.csr == 0x7c2:
-                self._barrier_start_state = state
+        csr_addr = state.raw_cpu_state.get('csr_addr')
+        if csr_addr != 0x7c2:
+            return result
+
+        self._barrier_start_state = state
+        return result
 
 
 @dataclass
@@ -662,8 +520,8 @@ class StreamingEvent(DurationEvent):
         })
 
 
-class StreamingEventGenerator(ThreadEventGenerator):
-    _stream_start_state: HartState | None = None
+class StreamingEventGenerator(EventGenerator):
+    _stream_start_state: TraceState | None = None
     _ssr_states: tuple[_SSRState, _SSRState, _SSRState]
     _active_ssr_states: tuple[_SSRState, _SSRState, _SSRState] | None = None
 
@@ -671,54 +529,48 @@ class StreamingEventGenerator(ThreadEventGenerator):
         super().__init__()
         self._ssr_states = (_SSRState(), _SSRState(), _SSRState())
 
-    def cycle(self, state: HartState, results: list[Event]):
-        instruction = state.executed_integer_instruction
+    def cycle(self, state: TraceState) -> list[StreamingEvent]:
+        result = []
 
-        if isinstance(instruction, SCFGWIInstruction):
-            ssr_states = self._ssr_states if instruction.ssr == 0x1F else (
-                self._ssr_states[instruction.ssr],)
-            reg = instruction.reg
+        if isinstance(state.instruction, SCFGWIInstruction) and not state.in_fpss_sequencer:
+            ssr_states = self._ssr_states if state.instruction.ssr == 0x1F else (
+                self._ssr_states[state.instruction.ssr],)
+            reg = state.instruction.reg
             for ssr_state in ssr_states:
                 if reg == 1:
-                    ssr_state.repetition = SCFGWIInstruction.read_value(state.integer_core)
+                    ssr_state.repetition = SCFGWIInstruction.read_value(state)
                 elif 2 <= reg < 6:
-                    ssr_state.bounds[reg - 2] = SCFGWIInstruction.read_value(state.integer_core)
+                    ssr_state.bounds[reg - 2] = SCFGWIInstruction.read_value(state)
                 elif 6 <= reg < 10:
-                    ssr_state.strides[reg - 6] = SCFGWIInstruction.read_value(state.integer_core, signed=True)
+                    ssr_state.strides[reg - 6] = SCFGWIInstruction.read_value(state, signed=True)
                 elif 24 <= reg < 28:
                     ssr_state.rank = reg - 23
                     ssr_state.write_stream = False
-                    ssr_state.address = SCFGWIInstruction.read_value(state.integer_core)
+                    ssr_state.address = SCFGWIInstruction.read_value(state)
                 elif 28 <= reg < 32:
                     ssr_state.rank = reg - 27
                     ssr_state.write_stream = True
-                    ssr_state.address = SCFGWIInstruction.read_value(state.integer_core)
+                    ssr_state.address = SCFGWIInstruction.read_value(state)
 
-        if self._active_ssr_states is not None:
-            if state.fpu is None:
-                return
-            instruction = state.fpu.instruction
-
-        if not isinstance(instruction, CSRInstruction):
-            return
-
-        if instruction.csr != 0x7c0:
-            return
+        if not isinstance(state.instruction, CSRInstruction) or state.instruction.csr != 0x7c0:
+            return result
 
         # Stream enables and disables always appear twice. Once when issued from the integer core, second when processed
         # by the FPSS. We denote the start as when issued by the integer core and the end when disabled in the FPSS.
-        if isinstance(instruction, CSRRSIInstruction):
+        if state.instruction.is_csrrsi:
             if self._stream_start_state is None:
                 self._stream_start_state = state
                 self._active_ssr_states = deepcopy(self._ssr_states)
-        elif isinstance(instruction, CSRRCIInstruction):
+        elif state.instruction.is_csrrci and state.in_fpss_sequencer:
             if self._stream_start_state is not None and self._active_ssr_states is not None:
-                results.append(StreamingEvent(self._stream_start_state.clock_cycle,
-                                              state.clock_cycle - self._stream_start_state.clock_cycle,
-                                              self._active_ssr_states))
+                result.append(StreamingEvent(self._stream_start_state.clock_cycle,
+                                             state.clock_cycle - self._stream_start_state.clock_cycle,
+                                             self._active_ssr_states))
 
             self._active_ssr_states = None
             self._stream_start_state = None
+
+        return result
 
 
 class DMAEvent(DurationEvent):
@@ -746,7 +598,7 @@ class DMAEvent(DurationEvent):
         })
 
 
-class DMAEventGenerator(ThreadEventGenerator):
+class DMAEventGenerator(EventGenerator):
     @dataclass
     class _InFlightDMA:
         started: int
@@ -779,33 +631,35 @@ class DMAEventGenerator(ThreadEventGenerator):
                          t.is_2d, t.source_strides, t.dest_strides, t.outer_loop))
         return result
 
-    def cycle(self, state: HartState, results: list[Event]):
-        instruction = state.executed_integer_instruction
+    def cycle(self, state: TraceState) -> list[StreamingEvent]:
+        result = []
+
+        instruction = state.instruction
         if isinstance(instruction, DMSRCInstruction):
-            self._current_source = instruction.read_source(state.integer_core)
+            self._current_source = instruction.read_source(state)
         elif isinstance(instruction, DMDSTInstruction):
-            self._current_destination = instruction.read_destination(state.integer_core)
+            self._current_destination = instruction.read_destination(state)
         elif isinstance(instruction, DMREPInstruction):
-            self._current_repetition = instruction.read_reps(state.integer_core)
+            self._current_repetition = instruction.read_reps(state)
         elif isinstance(instruction, DMSTRInstruction):
-            self._current_source_stride = instruction.read_source_strides(state.integer_core)
-            self._current_dest_stride = instruction.read_dest_strides(state.integer_core)
+            self._current_source_stride = instruction.read_source_strides(state)
+            self._current_dest_stride = instruction.read_dest_strides(state)
         elif isinstance(instruction, DMCPYIInstruction):
             if instruction.is_2d:
                 o = self._InFlightDMA(state.clock_cycle, self._current_source, self._current_destination,
-                                      instruction.read_size(state.integer_core), is_2d=True,
+                                      instruction.read_size(state), is_2d=True,
                                       source_strides=self._current_source_stride,
                                       dest_strides=self._current_dest_stride,
                                       outer_loop=self._current_repetition)
             else:
                 o = self._InFlightDMA(state.clock_cycle, self._current_source, self._current_destination,
-                                      instruction.read_size(state.integer_core), is_2d=False)
+                                      instruction.read_size(state), is_2d=False)
 
             def write_back(txid):
                 o.transfer_id = txid
                 return []
 
-            results += self.schedule_int_writeback(state.integer_core, write_back)
+            result += self.schedule_writeback(state, write_back)
             self._in_flight.append(o)
 
         elif isinstance(instruction, DMSTATIInstruction):
@@ -817,7 +671,7 @@ class DMAEventGenerator(ThreadEventGenerator):
                         self._in_flight.clear()
                     return inner_result
 
-                results += self.schedule_int_writeback(state.integer_core, write_back)
+                result += self.schedule_writeback(state, write_back)
             elif instruction.status == 0:
                 def write_back(last_completed):
                     inner_result = []
@@ -833,37 +687,25 @@ class DMAEventGenerator(ThreadEventGenerator):
                     del self._in_flight[:index + 1]
                     return inner_result
 
-                results += self.schedule_int_writeback(state.integer_core, write_back)
+                result += self.schedule_writeback(state, write_back)
+
+        return result
 
 
 def worker(file: str):
     events = []
-    generators: list[ThreadEventGenerator] = [BarrierEventGenerator(), StreamingEventGenerator(), DMAEventGenerator()]
+    generators = [BarrierEventGenerator(), StreamingEventGenerator(), DMAEventGenerator()]
     with open(file, 'r') as f:
-        for index, state in enumerate(get_hart_state(f)):
+        for index, l in enumerate(f):
+            state = get_trace_state(l)
+            if state is None:
+                raise RuntimeError('Failed to parse trace: ' + l)
+
             for g in generators:
-                g.cycle(state, events)
-                g.check_accumulators(state, events)
+                if not state.stalled:
+                    events += g.cycle(state)
+                events += g.check_accumulator(state)
     return events
-
-
-# def global_worker(filenames: typing.Iterable[str]) -> list[ThreadEventGenerator]:
-#     result = []
-#     generators: list[GlobalEventGenerator] = []
-#     with ExitStack() as stack:
-#         files = (*(stack.enter_context(open(file, 'r')) for file in filenames),)
-#         thread_states: list[ThreadState | None] = [None] * len(files)
-#
-#         while True:
-#             # TODO: Fill thread states.
-#
-#             for g in generators:
-#                 g.cycle(thread_states, result)
-#                 for t in thread_states:
-#                     if t is not None:
-#                         g.check_accumulator(t, result)
-#
-#     return result
 
 
 def main():
@@ -905,7 +747,6 @@ def main():
         futures.append(executor.submit(worker, file))
 
     events = calculate_sections(args.inputs, args.elf, args.addr2line, args.traces)
-    # events += global_worker(args.traces)
 
     for hartid, f in enumerate(futures):
         events += map(lambda e: e.to_chrome_tracing(hartid), f.result())

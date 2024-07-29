@@ -148,10 +148,6 @@ public:
                 StringAttr::get(context, "riscv32-unknown-elf"));
     list.append("compute_cores",
                 IntegerAttr::get(IntegerType::get(context, 32), 8));
-    list.append("bank_count",
-                IntegerAttr::get(IntegerType::get(context, 32), 32));
-    list.append("bank_byte_size",
-                IntegerAttr::get(IntegerType::get(context, 32), 4));
     executableTargetAttrs.push_back(IREE::HAL::ExecutableTargetAttr::get(
         context, StringAttr::get(context, "quidditch"),
         StringAttr::get(context, "static"), list.getDictionary(context)));
@@ -232,7 +228,6 @@ public:
     addIREEPostBufferizationPasses(modulePassManager.nest<func::FuncOp>());
 
     FunctionLikeNest(modulePassManager)
-        .addPass(quidditch::createAvoidBankConflictsPass)
         .addPass(quidditch::Snitch::createLowerPipelineOpPass)
         .addPass(quidditch::Snitch::createLowerForallOpPass)
         .addPass(createSCFForLoopCanonicalizationPass)
