@@ -288,8 +288,7 @@ StartTensorCopyOp::getBufferType(Value value,
 
   std::reverse(strides.begin(), strides.end());
   if (strides.size() == 2)
-    if (strides[0] % 2 == 0)
-      strides[0]++;
+      strides[0] = llvm::alignTo(strides[0], 16);
 
   auto layout = StridedLayoutAttr::get(value.getContext(), 0, strides);
   return getMemRefType(getResult(), options, layout,

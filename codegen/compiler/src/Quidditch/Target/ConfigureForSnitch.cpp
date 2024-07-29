@@ -83,7 +83,7 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
         }
         if (funcOp.getName() ==
             "main$async_dispatch_1_matmul_transpose_b_1x1200x400_f64") {
-          workgroupTiles[2] = 100;
+          workgroupTiles[2] = 80;
 
           l1Tiles[0] = 0;
           l1Tiles[1] = 40;
