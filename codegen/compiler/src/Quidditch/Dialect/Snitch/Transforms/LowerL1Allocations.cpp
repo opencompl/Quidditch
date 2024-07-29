@@ -63,18 +63,48 @@ void LowerL1Allocations::runOnOperation() {
 
     auto byteShift =
         builder.create<arith::ConstantIndexOp>(allocOp.getLoc(), offset);
-    // Get rid of the memory space at this point in the pipeline.
-    auto viewOp = builder.create<memref::ViewOp>(
+
+    // We do not support anything but a zero offset right now.
+    [[maybe_unused]] int64_t ignoredOffset;
+    SmallVector<int64_t> strides;
+    if (failed(getStridesAndOffset(memRefType, strides, ignoredOffset))) {
+      allocOp->emitOpError(
+          "Cannot lower MemRef in L1 memory with a non-strided layout");
+      signalPassFailure();
+      return;
+    }
+    if (ignoredOffset != 0) {
+      allocOp->emitOpError(
+          "Cannot lower MemRef in L1 memory with a non-zero offset");
+      signalPassFailure();
+      return;
+    }
+
+    // Compute how many elements we need to allocate to support the memory
+    // layout. This may contain padding elements due to the strides.
+    // Compute this via the linearized access of the last element + 1.
+    int64_t allocElements = 1;
+    for (auto [stride, shape] : llvm::zip_equal(strides, memRefType.getShape()))
+      allocElements += stride * (shape - 1);
+
+    // First, allocate one large contiguous element memref.
+    // Get rid of the memory space at this point as well.
+    Value view = builder.create<memref::ViewOp>(
+        allocOp.getLoc(),
+        MemRefType::get({allocElements}, memRefType.getElementType()), l1Memory,
+        byteShift,
+        /*sizes=*/ValueRange());
+
+    // Reinterpret cast the view with the actual shape and strides.
+    view = builder.create<memref::ReinterpretCastOp>(
         allocOp.getLoc(),
         MemRefType::get(memRefType.getShape(), memRefType.getElementType(),
                         memRefType.getLayout()),
-        l1Memory, byteShift,
-        /*sizes=*/ValueRange());
-    allocOp->replaceAllUsesWith(viewOp);
+        view, 0, memRefType.getShape(), strides);
+    allocOp.replaceAllUsesWith(view);
 
     uint64_t memRefSize = llvm::divideCeil(bitWidth, 8);
-    for (uint64_t size : memRefType.getShape())
-      memRefSize *= size;
+    memRefSize *= allocElements;
 
     offset += memRefSize;
     if (offset >= l1MemoryBytes) {
