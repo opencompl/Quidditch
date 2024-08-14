@@ -6,7 +6,6 @@
 #include <assert.h>
 #include <encoding.h>
 #include <riscv_decls.h>
-#include <ssr_decls.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -69,10 +68,6 @@ int quidditch_dispatch_enter_worker_loop() {
                          workgroupState))
       error = true;
 
-    // Required to make sure that we any memory side effects from the FPU
-    // sequence have finished at this point before signaling the kernel
-    // execution as being done.
-    snrt_fpu_fence();
     read_csr(mcycle);
 
     // Signal being done.
