@@ -45,7 +45,7 @@ int main() {
   for (int i = 0; i < IREE_ARRAYSIZE(data); i++) {
     double value = data[i];
     printf("%f\n", value);
-    if (value == (i + 1) * 2) continue;
+    if (value != (i + 1) * 2) return 1;
   }
   return 0;
 }
