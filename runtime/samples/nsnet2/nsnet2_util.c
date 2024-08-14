@@ -14,7 +14,7 @@ int run_nsnet2_experiment(
     iree_hal_executable_library_query_fn_t implementation) {
   if (!snrt_is_dm_core()) return quidditch_dispatch_enter_worker_loop();
 
-  double(*data)[161] = malloc(161 * sizeof(double));
+  double(*data)[161] = aligned_alloc(64, 161 * sizeof(double));
 
   for (int i = 0; i < IREE_ARRAYSIZE(*data); i++) {
     (*data)[i] = (i + 1);

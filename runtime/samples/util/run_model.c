@@ -91,10 +91,13 @@ iree_status_t run_model(const model_config_t* config) {
   if (!iree_status_is_ok(result)) goto error_release_context;
 
   for (iree_host_size_t i = 0; i < config->num_inputs; i++) {
-    iree_const_byte_span_t span = iree_make_const_byte_span(
-        config->input_data[i],
-        config->input_sizes[i] *
-            iree_hal_element_dense_byte_count(config->element_type));
+    iree_hal_external_buffer_t external_buffer = {
+        .type = IREE_HAL_EXTERNAL_BUFFER_TYPE_HOST_ALLOCATION,
+        .flags = IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE,
+        .size = config->input_sizes[i] *
+                iree_hal_element_dense_byte_count(config->element_type),
+        .handle.host_allocation = {(void*)config->input_data[i]},
+    };
 
     iree_hal_buffer_params_t params = {
         .usage = IREE_HAL_BUFFER_USAGE_DISPATCH_STORAGE,
@@ -103,15 +106,20 @@ iree_status_t run_model(const model_config_t* config) {
     };
     iree_hal_buffer_params_canonicalize(&params);
 
-    iree_hal_buffer_view_t* buffer = NULL;
-    result = iree_hal_buffer_view_allocate_buffer_copy(
-        device, iree_hal_device_allocator(device), config->input_ranks[i],
-        config->input_shapes[i], config->element_type,
-        IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR, params, span, &buffer);
-    if (!iree_status_is_ok(result)) goto error_release_context;
+    iree_hal_buffer_t* buffer = NULL;
+    IREE_CHECK_OK(iree_hal_allocator_import_buffer(
+        iree_hal_device_allocator(device), params, &external_buffer,
+        iree_hal_buffer_release_callback_null(), &buffer));
+
+    iree_hal_buffer_view_t* buffer_view = NULL;
+    IREE_CHECK_OK(iree_hal_buffer_view_create(
+        buffer, config->input_ranks[i], config->input_shapes[i],
+        config->element_type, IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
+        host_allocator, &buffer_view));
+    iree_hal_buffer_release(buffer);
 
     iree_vm_ref_t arg_buffer_view_ref;
-    arg_buffer_view_ref = iree_hal_buffer_view_move_ref(buffer);
+    arg_buffer_view_ref = iree_hal_buffer_view_move_ref(buffer_view);
     result = iree_vm_list_push_ref_retain(inputs, &arg_buffer_view_ref);
     if (!iree_status_is_ok(result)) goto error_release_context;
   }
