@@ -2,8 +2,8 @@
 # Global args.
 ARG LLVM_VERSION=18
 ARG PICOLIBC_VERSION=1.8.6
-ARG SNITCH_CLUSTER_SHA=96e34a2fa2f0a34d784387a40c7146b3b722e4c6
-ARG VERILATOR_RELEASE=v5.006
+ARG SNITCH_CLUSTER_SHA=1f984781957520b3784b9ab17e5eeb34eec763f1
+ARG VERILATOR_RELEASE=v4.228
 ARG BENDER_RELEASE=0.27.1
 ARG INSTALL_DIR=/opt
 ARG PULP_TOOLCHAIN_RELEASE=0.12.0
@@ -113,7 +113,7 @@ ARG INSTALL_DIR
 
 WORKDIR $INSTALL_DIR
 
-RUN apk update && apk add --no-cache py3-pip git autoconf flex-dev bison make musl-dev clang coreutils dtc help2man
+RUN apk update && apk add --no-cache py3-pip git autoconf flex-dev bison make musl-dev clang coreutils dtc
 
 ENV PATH=/root:$PATH
 COPY --from=bender-build $INSTALL_DIR/quidditch-toolchain/bin/bender /root
@@ -128,6 +128,9 @@ FROM alpine:3.18 AS snitch-verilator-build-base
 ARG SNITCH_CLUSTER_SHA
 ARG INSTALL_DIR
 
+COPY --from=bender-build $INSTALL_DIR/quidditch-toolchain/bin/bender /root
+COPY --from=verilator-build $INSTALL_DIR/verilator $INSTALL_DIR/verilator
+
 WORKDIR $INSTALL_DIR
 
 ENV PATH=/root:$PATH
@@ -138,16 +141,23 @@ RUN apk update && apk add --no-cache py3-pip git make musl-dev clang compiler-rt
 
 COPY requirements.txt /root/
 RUN pip install --break-system-packages -r /root/requirements.txt
-
-COPY --from=bender-build $INSTALL_DIR/quidditch-toolchain/bin/bender /root
-COPY --from=verilator-build $INSTALL_DIR/verilator $INSTALL_DIR/verilator
-
 RUN git clone https://github.com/pulp-platform/snitch_cluster && \
     cd snitch_cluster && git checkout $SNITCH_CLUSTER_SHA && git submodule update --init --recursive
+COPY toolchain/multi-thread-verilator.diff /root/multi-thread-verilator.diff
 WORKDIR $INSTALL_DIR/snitch_cluster
+RUN git apply /root/multi-thread-verilator.diff
 RUN bender vendor init
 
-FROM ghcr.io/pulp-platform/snitch_cluster:main@sha256:489d41bced5b7579dcf79cce626cb8b66ab5d14f1e1bd8727298beffdd133906 AS pgo-data-build-base
+FROM snitch-verilator-build-base AS snitch-verilator-clang-pgo-instrumented
+
+RUN make -C target/snitch_cluster \
+    CLANG_CXXFLAGS="-fprofile-instr-generate" \
+    CLANG_LDFLAGS="-static -fprofile-instr-generate" OPT_SLOW="-O1" \
+    CFG_OVERRIDE=cfg/fdiv.hjson VLT_USE_LLVM=ON bin/snitch_cluster.vlt -j$(nproc)
+RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
+RUN cp ./target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/
+
+FROM ghcr.io/pulp-platform/snitch_cluster:main@sha256:dddc3d1fa097dd33bdf7f6e4f04a952d5a873897efd2e54e682f6b5b68143c90 AS pgo-data-build
 
 ARG SNITCH_CLUSTER_SHA
 ARG INSTALL_DIR
@@ -160,24 +170,12 @@ RUN bender vendor init && make -C target/snitch_cluster sw -j$(nproc)
 
 WORKDIR /snitch_cluster/target/snitch_cluster
 RUN mkdir bin
-
-FROM snitch-verilator-build-base AS snitch-verilator-clang-pgo-instrumented
-
-RUN make -C target/snitch_cluster \
-    CLANG_CXXFLAGS="-fprofile-instr-generate" \
-    CLANG_LDFLAGS="-static -fprofile-instr-generate" OPT_SLOW="-O1" \
-    CFG_OVERRIDE=cfg/fdiv.hjson VLT_USE_LLVM=ON bin/snitch_cluster.vlt -j$(nproc)
-RUN mkdir -p $INSTALL_DIR/quidditch-toolchain/bin/
-RUN cp ./target/snitch_cluster/bin/snitch_cluster.vlt $INSTALL_DIR/quidditch-toolchain/bin/
-
-FROM pgo-data-build-base AS pgo-data-build-clang
-
 COPY --from=snitch-verilator-clang-pgo-instrumented $INSTALL_DIR/quidditch-toolchain/bin/snitch_cluster.vlt ./bin/
 RUN LLVM_PROFILE_FILE="/root/pgo/code_%m.profraw" ./util/run.py sw/run.yaml --simulator verilator -j
 
 FROM snitch-verilator-build-base AS snitch-verilator-build
 
-COPY --from=pgo-data-build-clang /root/pgo /root/
+COPY --from=pgo-data-build /root/pgo /root/
 
 RUN llvm-profdata merge -output=/root/code.profdata /root/code_*.profraw
 

@@ -1,0 +1,13 @@
+diff --git a/target/common/common.mk b/target/common/common.mk
+index 55b0c17..ca4da09 100644
+--- a/target/common/common.mk
++++ b/target/common/common.mk
+@@ -171,7 +171,7 @@ define VERILATE
+ 	$(BENDER) script verilator ${VLT_BENDER} > $(dir $@)files
+ 	$(VLT) \
+ 		--Mdir $(dir $@) -f $(dir $@)files $(VLT_FLAGS) \
+-		-j $(shell nproc) --cc --build --top-module $(1)
++		--cc -j 0 -build-jobs 0 --build --top-module $(1)
+ 	touch $@
+ endef
+ 
