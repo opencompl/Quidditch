@@ -51,6 +51,199 @@ static void printRISCVAssembly(OpAsmPrinter &opAsmPrinter, Operation *,
 }
 
 //===----------------------------------------------------------------------===//
+// TensorMicrokernelOp::RegionBranchOpInterface
+//===----------------------------------------------------------------------===//
+
+void TensorMicrokernelOp::getSuccessorRegions(
+    RegionBranchPoint point, SmallVectorImpl<RegionSuccessor> &regions) {
+  if (point.isParent()) {
+    regions.emplace_back(&getBody());
+    return;
+  }
+  regions.emplace_back(getResults());
+}
+
+void TensorMicrokernelOp::getRegionInvocationBounds(
+    ArrayRef<Attribute>, SmallVectorImpl<InvocationBounds> &invocationBounds) {
+  invocationBounds.push_back({1, 1});
+}
+
+//===----------------------------------------------------------------------===//
+// TensorMicrokernelOp::BufferizableOpInterface
+//===----------------------------------------------------------------------===//
+
+AliasingOpOperandList
+TensorMicrokernelOp::getAliasingOpOperands(Value value,
+                                           const AnalysisState &state) {
+  return {{
+      &getYieldOp()
+           .getResultsMutable()[cast<OpResult>(value).getResultNumber()],
+      BufferRelation::Equivalent,
+      /*isDefinite=*/true,
+  }};
+}
+
+FailureOr<BaseMemRefType>
+TensorMicrokernelOp::getBufferType(Value value,
+                                   const BufferizationOptions &options,
+                                   SmallVector<Value> &invocationStack) {
+  Value corresponding =
+      getYieldOp().getResults()[cast<OpResult>(value).getResultNumber()];
+  if (auto memRefType = dyn_cast<BaseMemRefType>(corresponding.getType()))
+    return memRefType;
+
+  return bufferization::getBufferType(corresponding, options, invocationStack);
+}
+
+LogicalResult
+TensorMicrokernelOp::bufferize(RewriterBase &rewriter,
+                               const BufferizationOptions &options) {
+  SmallVector<Value> newYields;
+  for (Value result : getYieldOp().getResults()) {
+    if (!isa<TensorType>(result.getType())) {
+      newYields.push_back(result);
+      continue;
+    }
+    auto bufferType = bufferization::getBuffer(rewriter, result, options);
+    if (failed(bufferType))
+      return failure();
+    newYields.push_back(*bufferType);
+  }
+
+  SetVector<Value> inputs;
+  WalkResult walkResult = walk([&](Operation *operation) {
+    for (Value value : operation->getOperands()) {
+      if (isa<TensorType>(value.getType())) {
+        FailureOr<Value> newInput = getBuffer(rewriter, value, options);
+        if (failed(newInput))
+          return WalkResult::interrupt();
+        value = *newInput;
+      }
+
+      if (getBody().isAncestor(value.getParentRegion()))
+        continue;
+      inputs.insert(value);
+    }
+    return WalkResult::advance();
+  });
+  if (walkResult.wasInterrupted())
+    return failure();
+
+  auto replacement =
+      rewriter.create<MemRefMicrokernelOp>(getLoc(), inputs.getArrayRef());
+  Block *newBlock = replacement.createEntryBlock();
+  {
+    OpBuilder::InsertionGuard guard{rewriter};
+    rewriter.setInsertionPointToStart(newBlock);
+
+    rewriter.mergeBlocks(&getBody().front(), newBlock);
+    rewriter.eraseOp(newBlock->getTerminator());
+
+    SmallVector<Value> vector = inputs.takeVector();
+    rewriter.setInsertionPointToStart(newBlock);
+    for (auto [oldV, newV] : llvm::zip(vector, newBlock->getArguments()))
+      rewriter.replaceUsesWithIf(oldV, newV, [&](OpOperand &operand) {
+        return replacement.getBody().isAncestor(
+            operand.getOwner()->getParentRegion());
+      });
+  }
+
+  replaceOpWithBufferizedValues(rewriter, *this, newYields);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// MicrokernelYieldOp::BufferizableOpInterface
+//===----------------------------------------------------------------------===//
+
+bool MicrokernelYieldOp::bufferizesToMemoryRead(
+    OpOperand &, const bufferization::AnalysisState &) {
+  return false;
+}
+
+bool MicrokernelYieldOp::bufferizesToMemoryWrite(OpOperand &,
+                                                 const AnalysisState &) {
+  return false;
+}
+
+AliasingValueList MicrokernelYieldOp::getAliasingValues(OpOperand &opOperand,
+                                                        const AnalysisState &) {
+  return {{getParentOp()->getResult(opOperand.getOperandNumber()),
+           BufferRelation::Equivalent, /*isDefinite=*/true}};
+}
+
+bool MicrokernelYieldOp::mustBufferizeInPlace(OpOperand &,
+                                              const AnalysisState &) {
+  // Yield operands always bufferize inplace. Otherwise, an alloc + copy
+  // may be generated inside the block. We should not return/yield allocations
+  // when possible.
+  return true;
+}
+
+LogicalResult
+MicrokernelYieldOp::bufferize(RewriterBase &rewriter,
+                              const BufferizationOptions &options) {
+  SmallVector<Value> newResults;
+  for (auto &&[index, value] : llvm::enumerate(getResults())) {
+    if (!isa<TensorType>(value.getType())) {
+      newResults.push_back(value);
+      continue;
+    }
+
+    FailureOr<Value> maybeBuffer = getBuffer(rewriter, value, options);
+    if (failed(maybeBuffer))
+      return failure();
+
+    newResults.push_back(*maybeBuffer);
+  }
+  replaceOpWithNewBufferizedOp<MicrokernelYieldOp>(rewriter, *this, newResults);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SyncTensorOp::BufferizableOpInterface
+//===----------------------------------------------------------------------===//
+
+bool SyncTensorOp::bufferizesToMemoryRead(
+    OpOperand &, const bufferization::AnalysisState &) {
+  return false;
+}
+
+bool SyncTensorOp::bufferizesToMemoryWrite(OpOperand &opOperand,
+                                           const AnalysisState &) {
+  assert(opOperand == getInputMutable());
+  // The op making the asynchronous result of the microkernel available is
+  // effectively a write operation to the MemRef.
+  return true;
+}
+
+AliasingValueList SyncTensorOp::getAliasingValues(OpOperand &opOperand,
+                                                  const AnalysisState &) {
+  assert(opOperand == getInputMutable());
+  return {{getResult(), BufferRelation::Equivalent, /*isDefinite=*/true}};
+}
+
+bool SyncTensorOp::mustBufferizeInPlace(OpOperand &opOperand,
+                                        const AnalysisState &) {
+  assert(opOperand == getInputMutable());
+  // The operation must bufferize in place as a copy inserted by the
+  // bufferization framework would be inserted prior to the
+  // `microkernel_fence` operation and not semantically equivalent.
+  return true;
+}
+
+LogicalResult SyncTensorOp::bufferize(RewriterBase &rewriter,
+                                      const BufferizationOptions &options) {
+  FailureOr<Value> inputTensorBuffer = getBuffer(rewriter, getInput(), options);
+  if (failed(inputTensorBuffer))
+    return failure();
+
+  rewriter.create<MicrokernelFenceOp>(getLoc());
+  replaceOpWithBufferizedValues(rewriter, *this, *inputTensorBuffer);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // MemRefMicrokernelOp
 //===----------------------------------------------------------------------===//
 

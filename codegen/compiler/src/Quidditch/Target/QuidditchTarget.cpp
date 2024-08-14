@@ -199,7 +199,8 @@ public:
         })
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
-        .addPass(createLoopInvariantCodeMotionPass);
+        .addPass(createLoopInvariantCodeMotionPass)
+        .addPass(quidditch::Snitch::createFormMicrokernelsPass);
 
     BufferizationOptions::AllocationFn allocationFn =
         [](OpBuilder &builder, Location loc, MemRefType memRefType,
@@ -246,8 +247,7 @@ public:
         .addPass(createCSEPass)
         .addPass(createLoopInvariantCodeMotionPass)
         .addPass(createLinalgGeneralizeNamedOpsPass)
-        .addPass(quidditch::createRemoveTrivialLoopsPass)
-        .addPass(quidditch::Snitch::createFormMicrokernelsPass);
+        .addPass(quidditch::createRemoveTrivialLoopsPass);
 
     modulePassManager.addPass(quidditch::Snitch::createSpecializeDMACodePass());
     FunctionLikeNest(modulePassManager)
