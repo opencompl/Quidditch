@@ -24,7 +24,8 @@ typedef struct {
 
   /// Number of input tensors.
   iree_host_size_t num_inputs;
-  /// Input tensor data in dense row major encoding.
+  /// Input tensor data in dense row major encoding. Must be aligned to 64
+  /// bytes.
   const void** input_data;
   /// Number of elements for each input in 'input_data'.
   const iree_host_size_t* input_sizes;
