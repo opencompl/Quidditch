@@ -7,7 +7,7 @@ hal.executable @test {
     builtin.module {
       // CHECK-LABEL: func @test
       func.func @test() {
-        %0 = quidditch_snitch.cluster_index
+        %0 = quidditch_snitch.compute_core_index
         %1 = arith.constant 8 : index
         // CHECK-NOT: scf.for
         scf.for %arg3 = %0 to %1 step %1 {

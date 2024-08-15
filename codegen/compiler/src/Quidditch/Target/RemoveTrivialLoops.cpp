@@ -30,8 +30,8 @@ static std::optional<std::pair<AffineExpr, AffineExpr>>
 getWorkgroupRange(Value processorValue,
                   std::optional<IntegerAttr> numComputeCores,
                   ArrayRef<int64_t> workgroupCount) {
-  if (auto idOp =
-          processorValue.getDefiningOp<quidditch::Snitch::ClusterIndexOp>()) {
+  if (auto idOp = processorValue
+                      .getDefiningOp<quidditch::Snitch::ComputeCoreIndexOp>()) {
     if (!numComputeCores)
       return std::nullopt;
 

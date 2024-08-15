@@ -13,7 +13,7 @@ hal.executable @test {
       // CHECK-SAME: %[[UB:[[:alnum:]]+]]
       // CHECK-SAME: %[[STEP:[[:alnum:]]+]]
       func.func @test(%lb : index, %ub : index, %step : index) {
-        // CHECK: %[[ID:.*]] = quidditch_snitch.cluster_index
+        // CHECK: %[[ID:.*]] = quidditch_snitch.compute_core_index
         // CHECK: %[[NLB:.*]] = affine.apply #[[$MAP1]](%[[LB]], %[[ID]], %[[STEP]])
         // CHECK: %[[NSTEP:.*]] = affine.apply #[[$MAP2]](%[[STEP]])
         // CHECK: scf.for %[[IV:.*]] = %[[NLB]] to %[[UB]] step %[[NSTEP]]

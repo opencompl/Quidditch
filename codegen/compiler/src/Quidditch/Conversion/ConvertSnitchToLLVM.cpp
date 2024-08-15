@@ -482,18 +482,19 @@ struct CallMicrokernelOpLowering : ConvertOpToLLVMPattern<CallMicrokernelOp> {
   }
 };
 
-struct ClusterIndexOpLowering : ConvertOpToLLVMPattern<ClusterIndexOp> {
+struct ComputeCoreIndexOpLowering : ConvertOpToLLVMPattern<ComputeCoreIndexOp> {
 
-  LLVM::LLVMFuncOp clusterIndexFunc;
+  LLVM::LLVMFuncOp computeCoreIndexFunc;
 
-  ClusterIndexOpLowering(LLVM::LLVMFuncOp clusterIndexFunc,
-                         const LLVMTypeConverter &converter)
-      : ConvertOpToLLVMPattern(converter), clusterIndexFunc(clusterIndexFunc) {}
+  ComputeCoreIndexOpLowering(LLVM::LLVMFuncOp computeCoreIndexFunc,
+                             const LLVMTypeConverter &converter)
+      : ConvertOpToLLVMPattern(converter),
+        computeCoreIndexFunc(computeCoreIndexFunc) {}
 
   LogicalResult
-  matchAndRewrite(ClusterIndexOp op, OpAdaptor adaptor,
+  matchAndRewrite(ComputeCoreIndexOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, clusterIndexFunc,
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, computeCoreIndexFunc,
                                               ValueRange());
     return success();
   }
@@ -525,17 +526,17 @@ void quidditch::populateSnitchToLLVMConversionPatterns(
           i32, ArrayRef<Type>{ptrType, ptrType, sizeT, sizeT, sizeT, sizeT}));
   dmaStart2D->setAttr("hal.import.bitcode", builder.getUnitAttr());
 
-  auto clusterCoreIndex = builder.create<LLVM::LLVMFuncOp>(
+  auto computeCoreIndex = builder.create<LLVM::LLVMFuncOp>(
       builder.getUnknownLoc(), "snrt_cluster_core_idx",
       LLVM::LLVMFunctionType::get(i32, ArrayRef<Type>{}));
-  clusterCoreIndex->setAttr("hal.import.bitcode", builder.getUnitAttr());
+  computeCoreIndex->setAttr("hal.import.bitcode", builder.getUnitAttr());
 
   patterns.insert<L1MemoryViewOpLowering, CompletedTokenOpLowering,
                   BarrierOpLowering, MicrokernelFenceOpLowering,
                   WaitForDMATransfersOpLowering>(typeConverter);
   patterns.insert<StartDMATransferOp1DLowering>(dmaStart1D, typeConverter);
   patterns.insert<StartDMATransferOp2DLowering>(dmaStart2D, typeConverter);
-  patterns.insert<ClusterIndexOpLowering>(clusterCoreIndex, typeConverter);
+  patterns.insert<ComputeCoreIndexOpLowering>(computeCoreIndex, typeConverter);
   patterns.insert<CallMicrokernelOpLowering>(SymbolTable(moduleOp),
                                              typeConverter);
 }
