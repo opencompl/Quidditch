@@ -235,8 +235,15 @@ def QuidditchSnitch_BarrierOp : QuidditchSnitch_Op<"barrier"> {
   }];
 }
 
-def QuidditchSnitch_ClusterIndexOp
-  : QuidditchSnitch_Op<"cluster_index", [Pure]> {
+def QuidditchSnitch_ComputeCoreIndexOp
+  : QuidditchSnitch_Op<"compute_core_index", [Pure]> {
+
+  let description = [{
+    Returns the index of the compute core within a given cluster.
+    This is guaranteed to return a number between 0 and exclusive
+    `compute_cores` where `compute_cores` is an `IntegerAttr` in
+    the surrounding `ExecutableTargetAttr`.
+  }];
 
   let results = (outs Index:$result);
 

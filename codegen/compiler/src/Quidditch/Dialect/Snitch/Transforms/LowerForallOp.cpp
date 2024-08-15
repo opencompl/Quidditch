@@ -44,7 +44,7 @@ void LowerForallOp::runOnOperation() {
     forallOp.getTerminator().erase();
 
     OpBuilder builder(forallOp);
-    Value id = builder.create<ClusterIndexOp>(forallOp.getLoc());
+    Value id = builder.create<ComputeCoreIndexOp>(forallOp.getLoc());
 
     Value lb = forallOp.getLowerBound(builder).front();
     Value ub = forallOp.getUpperBound(builder).front();

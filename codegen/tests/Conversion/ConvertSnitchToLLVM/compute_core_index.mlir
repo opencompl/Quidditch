@@ -3,6 +3,6 @@
 // CHECK-LABEL: @test
 func.func private @test() -> index {
   // CHECK: call @snrt_cluster_core_idx()
-  %0 = quidditch_snitch.cluster_index
+  %0 = quidditch_snitch.compute_core_index
   return %0 : index
 }
