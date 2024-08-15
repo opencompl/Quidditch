@@ -41,22 +41,26 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
 
 
   // CHECK: scf.if
-  %r = scf.if %cond -> !quidditch_snitch.dma_token {
+  %r:2 = scf.if %cond -> (!quidditch_snitch.dma_token, index) {
     // CHECK-NEXT: quidditch_snitch.microkernel_fence
     // CHECK-NEXT: quidditch_snitch.barrier
     // CHECK-NEXT: %[[C:.*]] = quidditch_snitch.completed_token
-    // CHECK-NEXT: yield %[[C]]
     %t3 = quidditch_snitch.start_dma_transfer from %b_l1 : memref<32xf32> to %b : memref<32xf32>
-    scf.yield %t3 : !quidditch_snitch.dma_token
+    // CHECK-NEXT: %[[I:.*]] = quidditch_snitch.compute_core_index
+    %i = quidditch_snitch.compute_core_index
+    // CHECK-NEXT: yield %[[C]], %[[I]]
+    scf.yield %t3, %i : !quidditch_snitch.dma_token, index
   } else {
     // CHECK-NEXT: else
     // CHECK-NEXT: %[[C:.*]] = quidditch_snitch.completed_token
-    // CHECK-NEXT: yield %[[C]]
     %c = quidditch_snitch.completed_token
-    scf.yield %c : !quidditch_snitch.dma_token
+    // CHECK-NEXT: %[[I:.*]] = arith.constant
+    %i = arith.constant 1 : index
+    // CHECK-NEXT: yield %[[C]], %[[I]]
+    scf.yield %c, %i : !quidditch_snitch.dma_token, index
   }
   // CHECK: quidditch_snitch.barrier
-  quidditch_snitch.wait_for_dma_transfers %r : !quidditch_snitch.dma_token
+  quidditch_snitch.wait_for_dma_transfers %r#0 : !quidditch_snitch.dma_token
   // CHECK-NEXT: return
   return
 }
@@ -83,9 +87,12 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
 // CHECK-NEXT: scf.if
 // CHECK-NEXT: quidditch_snitch.barrier
 // CHECK-NEXT: quidditch_snitch.start_dma_transfer
-// CHECK-NEXT: yield
+// CHECK-NEXT: %[[ZERO:.*]] = arith.constant 0
+// CHECK-NEXT: yield %{{.*}}, %[[ZERO]] :
 // CHECK-NEXT: else
 // CHECK-NEXT: completed_token
+// CHECK-NEXT: arith.constant
+// CHECK-NEXT: yield
 // CHECK: quidditch_snitch.wait_for_dma_transfers
 // CHECK-NEXT: quidditch_snitch.barrier
 

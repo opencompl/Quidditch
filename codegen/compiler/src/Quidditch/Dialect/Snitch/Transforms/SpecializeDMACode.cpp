@@ -2,6 +2,7 @@
 
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
 
 namespace quidditch::Snitch {
@@ -31,6 +32,18 @@ static void removeComputeOps(FunctionOpInterface dmaCode) {
   dmaCode->walk([&](Operation *operation) {
     if (isa<MemRefMicrokernelOp, MicrokernelFenceOp>(operation))
       operation->erase();
+    if (auto index = dyn_cast<ComputeCoreIndexOp>(operation)) {
+      OpBuilder builder(operation);
+      // Make the DMA core follow the control flow of the first compute core.
+      // This whole pass runs under the assumption that any operation that is
+      // run on either the DMA core or compute cores are in non-divergent
+      // control flow. Making the DMA core follow any compute cores control
+      // flow is therefore safe to do.
+      // This is mainly required for barriers within a `scf.forall`.
+      operation->replaceAllUsesWith(
+          builder.create<arith::ConstantIndexOp>(operation->getLoc(), 0));
+      operation->erase();
+    }
   });
 }
 
