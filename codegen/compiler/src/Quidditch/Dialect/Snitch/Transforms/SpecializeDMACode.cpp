@@ -64,16 +64,10 @@ static void removeDmaCode(FunctionOpInterface computeCode) {
 static void insertBarriers(FunctionOpInterface function) {
   function->walk([](Operation *operation) {
     OpBuilder builder(operation->getContext());
-    if (isa<WaitForDMATransfersOp>(operation)) {
+    if (isa<WaitForDMATransfersOp, MicrokernelFenceOp>(operation)) {
       // Barrier needs to be after the wait to signal to compute ops the
       // transfer is done.
       builder.setInsertionPointAfter(operation);
-    } else if (isa<StartDMATransferOp>(operation)) {
-      // Barrier needs to be before the transfer for compute ops to signal
-      // that a computation is done.
-      // TODO: This is overly conservative and could be optimized somewhere.
-      builder.setInsertionPoint(operation);
-      builder.create<MicrokernelFenceOp>(operation->getLoc());
     } else
       return;
 

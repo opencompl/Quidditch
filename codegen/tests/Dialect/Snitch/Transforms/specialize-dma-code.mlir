@@ -14,11 +14,7 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
   %a_l1 = memref.view %view[%c0][] : memref<512xi8> to memref<32xf32>
   %b_l1 = memref.view %view[%c256][] : memref<512xi8> to memref<32xf32>
 
-  // CHECK-NEXT: quidditch_snitch.microkernel_fence
-  // CHECK-NEXT: quidditch_snitch.barrier
   // CHECK-NEXT: quidditch_snitch.completed_token
-  // CHECK-NEXT: quidditch_snitch.microkernel_fence
-  // CHECK-NEXT: quidditch_snitch.barrier
   // CHECK-NEXT: quidditch_snitch.completed_token
   // CHECK-NEXT: quidditch_snitch.barrier
   quidditch_snitch.start_dma_transfer from %a : memref<32xf32> to %a_l1 : memref<32xf32>
@@ -31,6 +27,7 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
   ^bb0(%arg0 : memref<32xf32>, %arg1 : memref<32xf32>):
     linalg.abs ins(%arg0 : memref<32xf32>) outs(%arg1 : memref<32xf32>)
   }
+  quidditch_snitch.microkernel_fence
 
   // CHECK-NEXT: quidditch_snitch.microkernel_fence
   // CHECK-NEXT: quidditch_snitch.barrier
@@ -42,8 +39,6 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
 
   // CHECK: scf.if
   %r:2 = scf.if %cond -> (!quidditch_snitch.dma_token, index) {
-    // CHECK-NEXT: quidditch_snitch.microkernel_fence
-    // CHECK-NEXT: quidditch_snitch.barrier
     // CHECK-NEXT: %[[C:.*]] = quidditch_snitch.completed_token
     %t3 = quidditch_snitch.start_dma_transfer from %b_l1 : memref<32xf32> to %b : memref<32xf32>
     // CHECK-NEXT: %[[I:.*]] = quidditch_snitch.compute_core_index
@@ -72,9 +67,7 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
 // CHECK: memref.view
 // CHECK-NEXT: memref.view
 
-// CHECK-NEXT: quidditch_snitch.barrier
 // CHECK-NEXT: quidditch_snitch.start_dma_transfer
-// CHECK-NEXT: quidditch_snitch.barrier
 // CHECK-NEXT: quidditch_snitch.start_dma_transfer
 // CHECK-NEXT: quidditch_snitch.wait_for_dma_transfers
 // CHECK-NEXT: quidditch_snitch.barrier
@@ -85,7 +78,6 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
 // CHECK-NEXT: quidditch_snitch.barrier
 
 // CHECK-NEXT: scf.if
-// CHECK-NEXT: quidditch_snitch.barrier
 // CHECK-NEXT: quidditch_snitch.start_dma_transfer
 // CHECK-NEXT: %[[ZERO:.*]] = arith.constant 0
 // CHECK-NEXT: yield %{{.*}}, %[[ZERO]] :

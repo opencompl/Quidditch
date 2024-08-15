@@ -27,60 +27,28 @@ protected:
 };
 } // namespace
 
-static void outlineOpsToFunction(MutableArrayRef<linalg::LinalgOp> ops) {
-  if (ops.empty())
-    return;
-
-  auto builder = OpBuilder(ops.front());
-
-  SetVector<Value> inputs;
-  for (linalg::LinalgOp computeOp : ops) {
-    inputs.insert(computeOp->getOperands().begin(),
-                  computeOp->getOperands().end());
-
-    computeOp.walk([&](Operation *operation) {
-      for (Value value : operation->getOperands()) {
-        if (computeOp->getParentRegion()->isProperAncestor(
-                value.getParentRegion()))
-          continue;
-
-        inputs.insert(value);
-      }
-    });
-  }
-
-  auto kernelOp = builder.create<MemRefMicrokernelOp>(ops.front()->getLoc(),
-                                                      inputs.getArrayRef());
-
-  Block *block = kernelOp.createEntryBlock();
-  builder.setInsertionPointToStart(block);
-
-  for (Operation *op : ops) {
-    op->remove();
-    builder.insert(op);
-  }
-
-  SmallVector<Value> vector = inputs.takeVector();
-  for (auto [oldV, newV] : llvm::zip(vector, block->getArguments()))
-    oldV.replaceUsesWithIf(newV, [&](OpOperand &operand) {
-      return kernelOp.getBody().isAncestor(
-          operand.getOwner()->getParentRegion());
-    });
-}
-
 void FormMicrokernels::runOnOperation() {
   FunctionOpInterface func = getOperation();
 
-  SmallVector<linalg::LinalgOp> outlinedOps;
-  func.walk([&](Block *block) {
-    for (Operation &op : *block) {
-      auto linalgOp = dyn_cast<linalg::LinalgOp>(op);
-      if (!linalgOp || !linalgOp.hasPureBufferSemantics()) {
-        outlineOpsToFunction(outlinedOps);
-        outlinedOps.clear();
-        continue;
-      }
-      outlinedOps.push_back(linalgOp);
+  func.walk([](linalg::LinalgOp linalgOp) {
+    if (!linalgOp.hasPureTensorSemantics())
+      return;
+
+    auto builder = OpBuilder(linalgOp);
+    auto kernelOp = builder.create<TensorMicrokernelOp>(
+        linalgOp.getLoc(), linalgOp->getResultTypes());
+    for (auto [oldResult, newResult] :
+         llvm::zip_equal(linalgOp->getResults(), kernelOp.getResults())) {
+      oldResult.replaceAllUsesWith(
+          builder.create<SyncTensorOp>(linalgOp.getLoc(), newResult));
     }
+
+    Block *block = &kernelOp.getBody().emplaceBlock();
+    builder.setInsertionPointToStart(block);
+
+    linalgOp->remove();
+    builder.insert(linalgOp);
+    builder.create<MicrokernelYieldOp>(linalgOp->getLoc(),
+                                       linalgOp->getResults());
   });
 }

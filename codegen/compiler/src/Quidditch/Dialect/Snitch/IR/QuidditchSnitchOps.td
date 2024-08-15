@@ -14,6 +14,81 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 class QuidditchSnitch_Op<string mnemonic, list<Trait> traits = []> :
   Op<QuidditchSnitch_Dialect, mnemonic, traits>;
 
+def QuidditchSnitch_TensorMicrokernelOp : QuidditchSnitch_Op<"tensor.microkernel",
+  [SingleBlock, NoRegionArguments, RecursivelySpeculatable, RecursiveMemoryEffects,
+   DeclareOpInterfaceMethods<RegionBranchOpInterface, [
+    "getRegionInvocationBounds"]>,
+   DeclareOpInterfaceMethods<BufferizableOpInterface, ["bufferize",
+    "getAliasingOpOperands", "getBufferType"]>]> {
+
+  let description = [{
+    Pre-bufferization version of `memref.microkernel`.
+    Unlike `memref.microkernel` it is not isolated from above and may also
+    return tensor operations as outputs via `microkernel_yield`.
+
+    Like `memref.microkernel`, operations within the kernel may be executing
+    asynchronously and cannot be used directly.
+    A `sync_tensor` operation must be used to make any result tensor of this
+    operation available.
+    Failing to do so results in unspecified values within the tensor.
+  }];
+
+  let results = (outs Variadic<AnyRankedTensor>:$results);
+
+  let regions = (region SizedRegion<1>:$body);
+
+  let assemblyFormat = [{
+    (`->` type($results)^ )? $body attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    MicrokernelYieldOp getYieldOp() {
+      return llvm::cast<MicrokernelYieldOp>(getBody().back().getTerminator());
+    }
+
+    mlir::Block* createEntryBlock();
+  }];
+}
+
+def QuidditchSnitch_MicrokernelYieldOp
+  : QuidditchSnitch_Op<"microkernel_yield", [Pure, Terminator,
+    HasParent<"TensorMicrokernelOp">, ReturnLike,
+    DeclareOpInterfaceMethods<BufferizableOpInterface,
+      ["bufferize", "bufferizesToMemoryRead", "bufferizesToMemoryWrite",
+       "getAliasingValues", "mustBufferizeInPlace"]>]> {
+  let arguments = (ins Variadic<AnyRankedTensor>:$results);
+
+  let assemblyFormat = [{
+    $results (`:` type($results)^)? attr-dict
+  }];
+}
+
+def QuidditchSnitch_SyncTensorOp : QuidditchSnitch_Op<"sync_tensor",
+  [AllTypesMatch<["result", "input"]>, Pure,
+    DeclareOpInterfaceMethods<BufferizableOpInterface,
+     ["bufferizesToMemoryRead", "bufferizesToMemoryWrite", "getAliasingValues",
+      "bufferize", "mustBufferizeInPlace"]>]> {
+
+  let description = [{
+    Performs synchronization of a tensor returned by a `tensor.microkernel`
+    operation.
+    The resulting tensor is guaranteed to consist of the results of any
+    operations performed by the `tensor.microkernel` operation.
+  }];
+
+  let arguments = (ins
+    AnyRankedTensor:$input
+  );
+
+  let results = (outs
+    AnyRankedTensor:$result
+  );
+
+  let assemblyFormat = [{
+    $input `:` type($result) attr-dict
+  }];
+}
+
 def QuidditchSnitch_MemRefMicrokernelOp
   : QuidditchSnitch_Op<"memref.microkernel", [IsolatedFromAbove, SingleBlock,
       NoTerminator]> {
