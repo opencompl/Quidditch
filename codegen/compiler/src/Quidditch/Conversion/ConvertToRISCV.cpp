@@ -145,7 +145,6 @@ ConvertToRISCV::convertToRISCVAssembly(MemRefMicrokernelOp kernelOp,
 void ConvertToRISCV::runOnOperation() {
   ModuleOp module = getOperation();
   SymbolTable symbolTable(module);
-  auto *dialect = getContext().getLoadedDialect<QuidditchSnitchDialect>();
 
   std::size_t kernelIndex = 0;
   module.walk([&](MemRefMicrokernelOp kernelOp) {
@@ -163,14 +162,11 @@ void ConvertToRISCV::runOnOperation() {
         return WalkResult::interrupt();
       }
 
-      auto containedFunc = kernelOp->getParentOfType<func::FuncOp>();
-      dialect->getXdslCompilationFailedAttrHelper().setAttr(
-          containedFunc, UnitAttr::get(&getContext()));
-      // The function is in an invalid state now that we cannot lower. Work
-      // around this by erasing the body completely.
-      containedFunc.setPrivate();
-      containedFunc.getBody().getBlocks().clear();
-      return WalkResult::interrupt();
+      auto builder = IRRewriter(kernelOp);
+      builder.inlineBlockBefore(&kernelOp.getBody().front(), kernelOp,
+                                kernelOp.getInputs());
+      kernelOp.erase();
+      return WalkResult::advance();
     }
 
     auto builder = OpBuilder(kernelOp);
