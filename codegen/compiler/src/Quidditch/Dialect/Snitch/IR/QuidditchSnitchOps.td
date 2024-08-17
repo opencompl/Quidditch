@@ -251,7 +251,6 @@ def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer"
 
   let description = [{
     Operation performing a DMA transfer from one MemRef to another.
-    At least one of the two MemRefs must be in L1 memory.
     The shapes (including dynamic ones at runtime) of both MemRefs must be
     identical with different strides and offsets allowed.
 
@@ -272,6 +271,24 @@ def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer"
   }];
 
   let hasFolder = 1;
+}
+
+def QuidditchSnitch_StartZeroMemTransferOp : QuidditchSnitch_Op<"start_zero_mem_transfer",
+  [MemoryEffects<[MemWrite]>]> {
+
+  let description = [{
+
+  }];
+
+  let arguments = (ins
+    Arg<Non0RankedMemRefOf<[AnyType]>, "zeroed buffer", [MemWrite]>:$filled
+  );
+
+  let results = (outs QuidditchSnitch_DMATokenType:$token);
+
+  let assemblyFormat = [{
+    $filled `:` type($filled) attr-dict
+  }];
 }
 
 def QuidditchSnitch_WaitForDMATransfersOp

@@ -4,6 +4,7 @@
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -43,46 +44,56 @@ struct L1MemoryViewOpLowering : ConvertOpToLLVMPattern<L1MemoryViewOp> {
     return success();
   }
 };
+} // namespace
+
+/// Returns the number of potentially non-contiguous outer dimensions of
+/// 'memRefType'. The remaining inner dimensions (i.e. all dimensions at index
+/// 'NonContiguousOuterDims' to the MemRef rank) are known to be contiguous.
+/// Returns failure if the layout attribute of the MemRef is unsupported.
+static FailureOr<size_t> getNumNonContiguousOuterDims(MemRefType memRefType) {
+  auto stridesAttr =
+      dyn_cast_or_null<StridedLayoutAttr>(memRefType.getLayout());
+  if (!stridesAttr) {
+    if (memRefType.getLayout() && !memRefType.getLayout().isIdentity())
+      return failure();
+
+    // No layout or identity layouts are by definition fully contiguous.
+    return 0;
+  }
+
+  int64_t innerSize = 1;
+  ArrayRef<int64_t> shape = memRefType.getShape();
+  ArrayRef<int64_t> strides = stridesAttr.getStrides();
+  for (; !shape.empty();
+       shape = shape.drop_back(), strides = strides.drop_back()) {
+    int64_t dim = shape.back();
+    // Unit dims can be dropped alongside the corresponding stride of that dim.
+    if (dim == 1)
+      continue;
+
+    int64_t stride = strides.back();
+    if (ShapedType::isDynamic(stride))
+      break;
+
+    if (innerSize != stride)
+      break;
+
+    // Note: Dim may be dynamic with the value -1. This intentionally will only
+    // fail the 'if' above later if the outer dims are non-zero.
+    innerSize *= dim;
+  }
+
+  return shape.size();
+}
 
 /// Returns true if this MemRef type is known to have a fully contiguous layout.
 /// TODO: Could be upstreamed next to
 /// 'memref::isStaticShapeAndContiguousRowMajor'
-bool isContiguous(MemRefType memRefType) {
-  MemRefLayoutAttrInterface layout = memRefType.getLayout();
-  if (!layout || layout.isIdentity())
-    return true;
-
-  // It is impossible to statically determine contiguity with dynamic strides.
-  auto strided = dyn_cast<StridedLayoutAttr>(layout);
-  if (!strided || llvm::any_of(strided.getStrides(), ShapedType::isDynamic))
-    return false;
-
-  // Calculate what the strides would be if it had an identity layout and check
-  // that they match.
-  ArrayRef<int64_t> shape = memRefType.getShape();
-  ArrayRef<int64_t> strides = strided.getStrides();
-  std::uint64_t currentIdentityStride = 1;
-  for (auto [dim, stride] : llvm::zip_equal(llvm::reverse(shape.drop_front()),
-                                            strides.drop_front())) {
-    // Unit dimensions are noops in regards to strides.
-    if (dim == 1)
-      continue;
-
-    if (currentIdentityStride != stride)
-      return false;
-
-    if (ShapedType::isDynamic(dim))
-      return false;
-    currentIdentityStride *= dim;
-  }
-
-  // Unit dimensions are noops in regards to strides.
-  if (shape.front() == 1)
-    return true;
-
-  return currentIdentityStride == strides.front();
+static bool isContiguous(MemRefType memRefType) {
+  return getNumNonContiguousOuterDims(memRefType) == 0;
 }
 
+namespace {
 struct StartDMATransferOp1DLowering
     : ConvertOpToLLVMPattern<StartDMATransferOp> {
 
@@ -134,7 +145,24 @@ struct StartDMATransferOp1DLowering
                                               });
   }
 };
+} // namespace
 
+static StridedLayoutAttr identityStride(MemRefType type) {
+  SmallVector<int64_t> strides{1};
+  for (int64_t dim : llvm::reverse(type.getShape().drop_back())) {
+    if (ShapedType::isDynamic(dim))
+      break;
+    strides.push_back(strides.back() * dim);
+  }
+
+  while (strides.size() < type.getShape().size())
+    strides.push_back(ShapedType::kDynamic);
+
+  std::reverse(strides.begin(), strides.end());
+  return StridedLayoutAttr::get(type.getContext(), 0, strides);
+}
+
+namespace {
 struct StartDMATransferOp2DLowering
     : ConvertOpToLLVMPattern<StartDMATransferOp> {
 
@@ -143,21 +171,6 @@ struct StartDMATransferOp2DLowering
   StartDMATransferOp2DLowering(LLVM::LLVMFuncOp dmaStart2DFunc,
                                const LLVMTypeConverter &converter)
       : ConvertOpToLLVMPattern(converter), dmaStart2DFunc(dmaStart2DFunc) {}
-
-  static StridedLayoutAttr identityStride(MemRefType type) {
-    SmallVector<int64_t> strides{1};
-    for (int64_t dim : llvm::reverse(type.getShape().drop_back())) {
-      if (ShapedType::isDynamic(dim))
-        break;
-      strides.push_back(strides.back() * dim);
-    }
-
-    while (strides.size() < type.getShape().size())
-      strides.push_back(ShapedType::kDynamic);
-
-    std::reverse(strides.begin(), strides.end());
-    return StridedLayoutAttr::get(type.getContext(), 0, strides);
-  }
 
   LogicalResult
   matchAndRewrite(StartDMATransferOp op, OpAdaptor adaptor,
@@ -305,6 +318,144 @@ struct StartDMATransferOp2DLowering
         });
 
     rewriter.replaceOp(op, loopNest.results.front());
+    return success();
+  }
+};
+
+// TODO: These should not be hardcoded.
+constexpr unsigned zeroMemSize = 0x10000;
+constexpr unsigned zeroMemAddress = 0x10030000;
+
+struct StartContiguousZeroMemTransferOpOpLowering
+    : ConvertOpToLLVMPattern<StartZeroMemTransferOp> {
+
+  LLVM::LLVMFuncOp dmaStart1DFunc;
+  LLVM::LLVMFuncOp dmaStart2DFunc;
+
+  StartContiguousZeroMemTransferOpOpLowering(LLVM::LLVMFuncOp dmaStart1DFunc,
+                                             LLVM::LLVMFuncOp dmaStart2DFunc,
+                                             const LLVMTypeConverter &converter)
+      : ConvertOpToLLVMPattern(converter, /*benefit=*/2),
+        dmaStart1DFunc(dmaStart1DFunc), dmaStart2DFunc(dmaStart2DFunc) {}
+
+  LogicalResult
+  matchAndRewrite(StartZeroMemTransferOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (!isContiguous(op.getFilled().getType()))
+      return failure();
+
+    Value zeroPointer = rewriter.create<LLVM::IntToPtrOp>(
+        op->getLoc(), rewriter.getType<LLVM::LLVMPointerType>(),
+        rewriter.create<LLVM::ConstantOp>(
+            op->getLoc(), rewriter.getI32IntegerAttr(zeroMemAddress)));
+    Value zeroMemSizeValue = rewriter.create<LLVM::ConstantOp>(
+        op->getLoc(), rewriter.getI32IntegerAttr(zeroMemSize));
+
+    SmallVector<Value, 4> sizes;
+    SmallVector<Value, 4> strides;
+    Value size;
+
+    auto filledDesc = MemRefDescriptor(adaptor.getFilled());
+
+    MemRefType memRefType = op.getFilled().getType();
+    SmallVector<Value> dynamicSizes;
+    for (auto [index, shape] : llvm::enumerate(memRefType.getShape()))
+      if (ShapedType::isDynamic(shape))
+        dynamicSizes.push_back(filledDesc.size(rewriter, op->getLoc(), index));
+
+    // Function does not support strided layout, even if it is contiguous.
+    // Lie about it and remove it.
+    // TODO: Consider fixing this upstream.
+    // TODO: Make a clone method of `MemRefType` that changes just the layout.
+    this->getMemRefDescriptorSizes(
+        op->getLoc(),
+        MemRefType::get(memRefType.getShape(), memRefType.getElementType()),
+        dynamicSizes, rewriter, sizes, strides, size);
+
+    Value zero =
+        createIndexAttrConstant(rewriter, op->getLoc(), getIndexType(), 0);
+    Value bufferPointer = filledDesc.bufferPtr(rewriter, op->getLoc(),
+                                               *getTypeConverter(), memRefType);
+    Value times2D =
+        rewriter.create<LLVM::UDivOp>(op->getLoc(), size, zeroMemSizeValue);
+    // Note: This call would not be legal as a 'start_dma_transfer' call as
+    // MemRefs do not allow internal aliasing, which the below does via the
+    // stride of 0.
+    rewriter.create<LLVM::CallOp>(op->getLoc(), dmaStart2DFunc,
+                                  ValueRange{bufferPointer, zeroPointer,
+                                             zeroMemSizeValue, zeroMemSizeValue,
+                                             zero, times2D});
+    Value offset =
+        rewriter.create<LLVM::MulOp>(op->getLoc(), times2D, zeroMemSizeValue);
+    bufferPointer = rewriter.create<LLVM::GEPOp>(
+        op->getLoc(), bufferPointer.getType(), rewriter.getI8Type(),
+        bufferPointer, offset);
+    Value rest =
+        rewriter.create<LLVM::URemOp>(op->getLoc(), size, zeroMemSizeValue);
+    rewriter.replaceOpWithNewOp<LLVM::CallOp>(
+        op, dmaStart1DFunc, ValueRange{bufferPointer, zeroPointer, rest});
+    return success();
+  }
+};
+
+struct StartZeroMemTransferOpOpLowering
+    : ConvertOpToLLVMPattern<StartZeroMemTransferOp> {
+
+  using ConvertOpToLLVMPattern<StartZeroMemTransferOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(StartZeroMemTransferOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    MemRefType memRefType = op.getFilled().getType();
+
+    FailureOr<size_t> nonContiguousDims =
+        getNumNonContiguousOuterDims(memRefType);
+    if (failed(nonContiguousDims) || nonContiguousDims == 0)
+      return failure();
+
+    SmallVector<OpFoldResult> sizes =
+        memref::getMixedSizes(rewriter, op->getLoc(), op.getFilled());
+
+    SmallVector<Value> lowerBounds;
+    SmallVector<Value> upperBounds;
+    SmallVector<Value> steps;
+    Value zeroIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 0);
+    Value oneIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
+    for (size_t index : llvm::seq(*nonContiguousDims)) {
+      lowerBounds.push_back(zeroIndex);
+      steps.push_back(oneIndex);
+      upperBounds.push_back(getValueOrCreateConstantIndexOp(
+          rewriter, op->getLoc(), sizes[index]));
+    }
+
+    // Loop over every non-contiguous dimension to zero every contiguous
+    // inner subview.
+    Value completedToken = rewriter.create<CompletedTokenOp>(op->getLoc());
+    scf::LoopNest loopNest = scf::buildLoopNest(
+        rewriter, op->getLoc(), lowerBounds, upperBounds, steps, completedToken,
+        [&](OpBuilder &builder, Location loc, ValueRange ivs,
+            ValueRange iterArgs) -> scf::ValueVector {
+          SmallVector<OpFoldResult> offsets = ivs;
+          SmallVector<OpFoldResult> subSizes(*nonContiguousDims,
+                                             rewriter.getIndexAttr(1));
+          for (unsigned i :
+               llvm::seq<unsigned>(*nonContiguousDims, memRefType.getRank())) {
+            offsets.push_back(rewriter.getIndexAttr(0));
+            subSizes.push_back(sizes[i]);
+          }
+          SmallVector<OpFoldResult> strides(memRefType.getRank(),
+                                            rewriter.getIndexAttr(1));
+
+          Value subMemRef = rewriter.create<memref::SubViewOp>(
+              loc, op.getFilled(), offsets, subSizes, strides);
+          return {
+              builder.create<StartZeroMemTransferOp>(op->getLoc(), subMemRef)};
+        });
+
+    Type tokenType = typeConverter->convertType(op.getType());
+    rewriter.replaceOp(
+        op, typeConverter->materializeTargetConversion(
+                rewriter, op->getLoc(), tokenType, loopNest.results.front()));
     return success();
   }
 };
@@ -531,11 +682,15 @@ void quidditch::populateSnitchToLLVMConversionPatterns(
       LLVM::LLVMFunctionType::get(i32, ArrayRef<Type>{}));
   computeCoreIndex->setAttr("hal.import.bitcode", builder.getUnitAttr());
 
-  patterns.insert<L1MemoryViewOpLowering, CompletedTokenOpLowering,
-                  BarrierOpLowering, MicrokernelFenceOpLowering,
-                  WaitForDMATransfersOpLowering>(typeConverter);
+  patterns
+      .insert<L1MemoryViewOpLowering, CompletedTokenOpLowering,
+              BarrierOpLowering, MicrokernelFenceOpLowering,
+              WaitForDMATransfersOpLowering, StartZeroMemTransferOpOpLowering>(
+          typeConverter);
   patterns.insert<StartDMATransferOp1DLowering>(dmaStart1D, typeConverter);
   patterns.insert<StartDMATransferOp2DLowering>(dmaStart2D, typeConverter);
+  patterns.insert<StartContiguousZeroMemTransferOpOpLowering>(
+      dmaStart1D, dmaStart2D, typeConverter);
   patterns.insert<ComputeCoreIndexOpLowering>(computeCoreIndex, typeConverter);
   patterns.insert<CallMicrokernelOpLowering>(SymbolTable(moduleOp),
                                              typeConverter);

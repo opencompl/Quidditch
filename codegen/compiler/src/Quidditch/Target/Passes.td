@@ -53,6 +53,8 @@ def ConvertToLLVMPass : Pass<"quidditch-convert-to-llvm", "mlir::ModuleOp"> {
   let dependentDialects = [
     "mlir::LLVM::LLVMDialect",
     "mlir::scf::SCFDialect",
+    "mlir::memref::MemRefDialect",
+    "mlir::affine::AffineDialect",
   ];
 }
 
