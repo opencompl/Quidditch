@@ -190,6 +190,8 @@ def QuidditchSnitch_StartTensorCopyOp : QuidditchSnitch_Op<"start_tensor_copy",
   let assemblyFormat = [{
     $copy `to` `L1` `:` type($copy) attr-dict
   }];
+
+  let hasFolder = 1;
 }
 
 def QuidditchSnitch_WaitForTensorCopyOp : QuidditchSnitch_Op<"wait_for_tensor_copy",
@@ -228,6 +230,8 @@ def QuidditchSnitch_WaitForTensorCopyOp : QuidditchSnitch_Op<"wait_for_tensor_co
   let assemblyFormat = [{
     `of` $copy `to` $transfer_tensor `using` $token `:` type($transfer_tensor) attr-dict
   }];
+
+  let hasFolder = 1;
 }
 
 def FlatI8MemRef : ConfinedType<MemRefOf<[I8]>, [HasStaticShapePred,
@@ -267,7 +271,7 @@ def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer"
     `from` $source `:` type($source) `to` $dest `:` type($dest) attr-dict
   }];
 
-  let hasCanonicalizeMethod = 1;
+  let hasFolder = 1;
 }
 
 def QuidditchSnitch_WaitForDMATransfersOp
@@ -290,7 +294,7 @@ def QuidditchSnitch_WaitForDMATransfersOp
 }
 
 def QuidditchSnitch_CompletedTokenOp
-  : QuidditchSnitch_Op<"completed_token", [Pure]> {
+  : QuidditchSnitch_Op<"completed_token", [Pure, ConstantLike]> {
 
   let description = [{
     Op returning a special value representing a completed DMA transfer.
@@ -302,6 +306,8 @@ def QuidditchSnitch_CompletedTokenOp
   let assemblyFormat = [{
     attr-dict
   }];
+
+  let hasFolder = 1;
 }
 
 def QuidditchSnitch_BarrierOp : QuidditchSnitch_Op<"barrier"> {

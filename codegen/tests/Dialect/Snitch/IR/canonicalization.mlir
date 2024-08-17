@@ -91,3 +91,24 @@ func.func @pipeline_invariant(%tensor : tensor<?xf32>) {
   }
   return
 }
+
+// CHECK-LABEL: @tensor_wait_gets_removed
+// CHECK-SAME: %[[ARG0:[[:alnum:]]+]]
+// CHECK-SAME: %[[ARG1:[[:alnum:]]+]]
+func.func @tensor_wait_gets_removed(%arg0 : tensor<?xf32>, %arg1 : tensor<?xf32>) -> tensor<?xf32> {
+  // CHECK-NEXT: return %[[ARG1]]
+  %t = quidditch_snitch.completed_token
+  %0 = quidditch_snitch.wait_for_tensor_copy of %arg0 to %arg1 using %t : tensor<?xf32>
+  return %0 : tensor<?xf32>
+}
+
+// CHECK-LABEL: @tensor_noop_transfer
+func.func @tensor_noop_transfer(%arg0 : tensor<?xf32>) -> (tensor<?xf32>, !quidditch_snitch.dma_token) {
+  // CHECK: %[[T:.*]] = quidditch_snitch.completed_token
+  // CHECK: %[[R:.*]] = quidditch_snitch.wait_for_tensor_copy
+  // CHECK-NEXT: return %[[R]], %[[T]]
+  %r, %t = quidditch_snitch.start_tensor_copy %arg0 to L1 : tensor<?xf32>
+  %0 = quidditch_snitch.wait_for_tensor_copy of %arg0 to %r using %t : tensor<?xf32>
+  %r2, %t2 = quidditch_snitch.start_tensor_copy %0 to L1 : tensor<?xf32>
+  return %r2, %t2 : tensor<?xf32>, !quidditch_snitch.dma_token
+}
