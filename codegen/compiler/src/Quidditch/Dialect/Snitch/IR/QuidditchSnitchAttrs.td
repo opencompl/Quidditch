@@ -8,6 +8,16 @@ include "mlir/IR/AttrTypeBase.td"
 class QuidditchSnitch_Attr<string name, list<Trait> traits = []> :
   AttrDef<QuidditchSnitch_Dialect, name, traits>;
 
+def QuidditchSnitch_CompletedTokenAttr : QuidditchSnitch_Attr<"CompletedToken"> {
+
+  let mnemonic = "completed_token";
+
+  let description = [{
+    Attribute representing an instance of a `!quidditch_snitch.dma_token`
+    signaling a complete transfer.
+  }];
+}
+
 def QuidditchSnitch_L1EncodingAttr : QuidditchSnitch_Attr<"L1Encoding"> {
   let mnemonic = "l1_encoding";
 

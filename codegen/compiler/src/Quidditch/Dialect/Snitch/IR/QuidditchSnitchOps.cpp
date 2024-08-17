@@ -379,6 +379,24 @@ LogicalResult CallMicrokernelOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// StartTensorCopyOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StartTensorCopyOp::fold(FoldAdaptor adaptor,
+                                      SmallVectorImpl<OpFoldResult> &results) {
+  auto waitOp = getCopy().getDefiningOp<WaitForTensorCopyOp>();
+  if (!waitOp)
+    return failure();
+  auto copyOp = waitOp.getTransferTensor().getDefiningOp<StartTensorCopyOp>();
+  if (!copyOp)
+    return failure();
+
+  results.emplace_back(waitOp);
+  results.emplace_back(CompletedTokenAttr::get(getContext()));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // StartTensorCopyOp::BufferizableOpInterface
 //===----------------------------------------------------------------------===//
 
@@ -534,6 +552,17 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
 }
 
 //===----------------------------------------------------------------------===//
+// WaitForTensorCopyOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult WaitForTensorCopyOp::fold(FoldAdaptor adaptor) {
+  if (adaptor.getToken())
+    return getTransferTensor();
+
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
 // WaitForTensorCopyOp::BufferizableOpInterface
 //===----------------------------------------------------------------------===//
 
@@ -599,16 +628,22 @@ bool WaitForTensorCopyOp::isNotConflicting(
 }
 
 //===----------------------------------------------------------------------===//
+// CompletedTokenOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult CompletedTokenOp::fold(FoldAdaptor adaptor) {
+  return CompletedTokenAttr::get(getContext());
+}
+
+//===----------------------------------------------------------------------===//
 // StartDMATransferOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult StartDMATransferOp::canonicalize(StartDMATransferOp op,
-                                               PatternRewriter &rewriter) {
-  if (op.getSource() != op.getDest())
-    return failure();
+OpFoldResult StartDMATransferOp::fold(FoldAdaptor adaptor) {
+  if (getSource() != getDest())
+    return nullptr;
 
-  rewriter.replaceOpWithNewOp<CompletedTokenOp>(op);
-  return success();
+  return CompletedTokenAttr::get(getContext());
 }
 
 //===----------------------------------------------------------------------===//
@@ -621,7 +656,7 @@ WaitForDMATransfersOp::fold(FoldAdaptor adaptor,
   bool changed = false;
   MutableOperandRange tokens = getTokensMutable();
   for (int i = tokens.size() - 1; i >= 0; i--) {
-    if (tokens[i].get().getDefiningOp<CompletedTokenOp>()) {
+    if (adaptor.getTokens()[i]) {
       changed = true;
       tokens.erase(i);
     }
