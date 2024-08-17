@@ -5,6 +5,7 @@ func.func @test(%arg0 : memref<f64>) {
   ^bb0(%arg1 : memref<f64>):
 
   }
+  quidditch_snitch.wait_for_dma_transfers
   return
 }
 

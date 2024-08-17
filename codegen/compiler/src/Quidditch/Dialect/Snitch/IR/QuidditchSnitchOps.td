@@ -282,7 +282,7 @@ def QuidditchSnitch_WaitForDMATransfersOp
   );
 
   let assemblyFormat = [{
-    $tokens `:` type($tokens) attr-dict
+    ($tokens^ `:` type($tokens))? attr-dict
   }];
 
   let hasFolder = 1;
