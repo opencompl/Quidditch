@@ -11,6 +11,8 @@ iree_cc_library(
         "QuidditchSnitchAttrs.h.inc"
         "QuidditchSnitchDialect.cpp.inc"
         "QuidditchSnitchDialect.h.inc"
+        "QuidditchSnitchInterfaces.cpp.inc"
+        "QuidditchSnitchInterfaces.h.inc"
         "QuidditchSnitchOps.cpp.inc"
         "QuidditchSnitchOps.h.inc"
         "QuidditchSnitchTypes.cpp.inc"
@@ -18,11 +20,13 @@ iree_cc_library(
         SRCS
         "QuidditchSnitchAttrs.cpp"
         "QuidditchSnitchDialect.cpp"
+        "QuidditchSnitchInterfaces.cpp"
         "QuidditchSnitchOps.cpp"
         "QuidditchSnitchTypes.cpp"
         DEPS
         ::QuidditchSnitchAttrsGen
         ::QuidditchSnitchDialectGen
+        ::QuidditchSnitchInterfacesGen
         ::QuidditchSnitchOpsGen
         ::QuidditchSnitchTypesGen
         LLVMSupport
@@ -71,4 +75,14 @@ iree_tablegen_library(
         OUTS
         --gen-typedef-decls QuidditchSnitchTypes.h.inc
         --gen-typedef-defs QuidditchSnitchTypes.cpp.inc
+)
+
+iree_tablegen_library(
+        NAME
+        QuidditchSnitchInterfacesGen
+        TD_FILE
+        "QuidditchSnitchInterfaces.td"
+        OUTS
+        --gen-op-interface-decls QuidditchSnitchInterfaces.h.inc
+        --gen-op-interface-defs QuidditchSnitchInterfaces.cpp.inc
 )

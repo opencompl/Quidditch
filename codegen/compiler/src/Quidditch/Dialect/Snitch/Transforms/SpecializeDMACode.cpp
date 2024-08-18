@@ -28,49 +28,29 @@ private:
 using namespace mlir;
 using namespace quidditch::Snitch;
 
-static void removeComputeOps(FunctionOpInterface dmaCode) {
-  dmaCode->walk([&](Operation *operation) {
-    if (isa<MemRefMicrokernelOp, MicrokernelFenceOp>(operation))
-      operation->erase();
-    if (auto index = dyn_cast<ComputeCoreIndexOp>(operation)) {
-      OpBuilder builder(operation);
-      // Make the DMA core follow the control flow of the first compute core.
-      // This whole pass runs under the assumption that any operation that is
-      // run on either the DMA core or compute cores are in non-divergent
-      // control flow. Making the DMA core follow any compute cores control
-      // flow is therefore safe to do.
-      // This is mainly required for barriers within a `scf.forall`.
-      operation->replaceAllUsesWith(
-          builder.create<arith::ConstantIndexOp>(operation->getLoc(), 0));
-      operation->erase();
-    }
-  });
-}
-
-static void removeDmaCode(FunctionOpInterface computeCode) {
-  SmallVector<Operation *> toDelete;
-  computeCode->walk([&](Operation *operation) {
-    if (isa<WaitForDMATransfersOp>(operation))
-      operation->erase();
-    if (isa<StartDMATransferOp>(operation)) {
-      OpBuilder builder(operation);
-      operation->replaceAllUsesWith(
-          builder.create<CompletedTokenOp>(operation->getLoc()));
-      operation->erase();
-    }
-  });
-}
-
-static void insertBarriers(FunctionOpInterface function) {
-  function->walk([](Operation *operation) {
-    OpBuilder builder(operation->getContext());
-    if (isa<WaitForDMATransfersOp, MicrokernelFenceOp>(operation)) {
-      // Barrier needs to be after the wait to signal to compute ops the
-      // transfer is done.
-      builder.setInsertionPointAfter(operation);
-    } else
+/// Removes all operations from 'function' that implement
+/// 'CoreSpecializationOpInterface' but not 'Interface'.
+template <typename Interface>
+static void removeUnsupportedSpecializedOps(FunctionOpInterface function) {
+  function->walk([&](CoreSpecializationOpInterface operation) {
+    if (isa<Interface>(*operation))
       return;
 
+    IRRewriter rewriter(operation);
+    operation.replaceWithNoop(rewriter);
+  });
+}
+
+/// Inserts a barrier after every operation requiring according to
+/// 'CoreSpecializationOpInterface'.
+/// Note: Does not currently support barriers in divergent control flow.
+static void insertBarriers(FunctionOpInterface function) {
+  function->walk([](CoreSpecializationOpInterface operation) {
+    if (!operation.needsSynchronization())
+      return;
+
+    OpBuilder builder(operation.getContext());
+    builder.setInsertionPointAfter(operation);
     builder.create<BarrierOp>(operation->getLoc());
   });
 }
@@ -92,7 +72,8 @@ void SpecializeDMACode::runOnOperation() {
     dialect->getDmaSpecializationAttrHelper().setAttr(
         function, FlatSymbolRefAttr::get(clone));
 
-    removeComputeOps(clone);
-    removeDmaCode(function);
+    removeUnsupportedSpecializedOps<ComputeCoreSpecializationOpInterface>(
+        function);
+    removeUnsupportedSpecializedOps<DMACoreSpecializationOpInterface>(clone);
   }
 }
