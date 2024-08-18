@@ -2,6 +2,7 @@
 #define QUIDDITCH_DIALECT_SNITCH_QUIDDITCHSNITCHOPS
 
 include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.td"
+include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchInterfaces.td"
 include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchTypes.td"
 include "mlir/Dialect/Bufferization/IR/BufferizableOpInterface.td"
 include "mlir/IR/CommonTypeConstraints.td"
@@ -91,7 +92,7 @@ def QuidditchSnitch_SyncTensorOp : QuidditchSnitch_Op<"sync_tensor",
 
 def QuidditchSnitch_MemRefMicrokernelOp
   : QuidditchSnitch_Op<"memref.microkernel", [IsolatedFromAbove, SingleBlock,
-      NoTerminator]> {
+      NoTerminator, QuidditchSnitch_ComputeCoreSpecializationOpInterface]> {
 
   let description = [{
     Operation denoting a region of operations as a microkernel.
@@ -117,6 +118,8 @@ def QuidditchSnitch_MemRefMicrokernelOp
 
   let extraClassDeclaration = [{
     mlir::Block* createEntryBlock();
+
+    void replaceWithNoop(mlir::RewriterBase& rewriter);
   }];
 }
 
@@ -149,7 +152,8 @@ def QuidditchSnitch_CallMicrokernelOp
   }];
 }
 
-def QuidditchSnitch_MicrokernelFenceOp : QuidditchSnitch_Op<"microkernel_fence"> {
+def QuidditchSnitch_MicrokernelFenceOp : QuidditchSnitch_Op<"microkernel_fence",
+  [QuidditchSnitch_ComputeCoreSpecializationOpInterface]> {
 
   let description = [{
     Execution of this operation guarantees that the side-effects of all
@@ -159,6 +163,14 @@ def QuidditchSnitch_MicrokernelFenceOp : QuidditchSnitch_Op<"microkernel_fence">
 
   let assemblyFormat = [{
     attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    bool needsSynchronization() {
+      return true;
+    }
+
+    void replaceWithNoop(mlir::RewriterBase& rewriter);
   }];
 }
 
@@ -247,7 +259,8 @@ def QuidditchSnitch_L1MemoryViewOp : QuidditchSnitch_Op<"l1_memory_view",
 }
 
 def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer",
-  [MemoryEffects<[MemWrite]>, SameOperandsElementType, SameOperandsShape]> {
+  [MemoryEffects<[MemWrite]>, SameOperandsElementType, SameOperandsShape,
+   QuidditchSnitch_DMACoreSpecializationOpInterface]> {
 
   let description = [{
     Operation performing a DMA transfer from one MemRef to another.
@@ -271,10 +284,15 @@ def QuidditchSnitch_StartDMATransferOp : QuidditchSnitch_Op<"start_dma_transfer"
   }];
 
   let hasFolder = 1;
+
+  let extraClassDeclaration = [{
+    void replaceWithNoop(mlir::RewriterBase& rewriter);
+  }];
 }
 
 def QuidditchSnitch_StartZeroMemTransferOp : QuidditchSnitch_Op<"start_zero_mem_transfer",
-  [MemoryEffects<[MemWrite]>]> {
+  [MemoryEffects<[MemWrite]>,
+   QuidditchSnitch_DMACoreSpecializationOpInterface]> {
 
   let description = [{
 
@@ -289,10 +307,16 @@ def QuidditchSnitch_StartZeroMemTransferOp : QuidditchSnitch_Op<"start_zero_mem_
   let assemblyFormat = [{
     $filled `:` type($filled) attr-dict
   }];
+
+  let extraClassDeclaration = [{
+    void replaceWithNoop(mlir::RewriterBase& rewriter);
+  }];
 }
 
 def QuidditchSnitch_WaitForDMATransfersOp
-  : QuidditchSnitch_Op<"wait_for_dma_transfers"> {
+  : QuidditchSnitch_Op<"wait_for_dma_transfers", [
+    QuidditchSnitch_DMACoreSpecializationOpInterface
+  ]> {
 
   let description = [{
     Operation awaiting for DMA transfers denoted by its tokens to be finished.
@@ -308,6 +332,14 @@ def QuidditchSnitch_WaitForDMATransfersOp
 
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
+
+  let extraClassDeclaration = [{
+    bool needsSynchronization() {
+      return true;
+    }
+
+    void replaceWithNoop(mlir::RewriterBase& rewriter);
+  }];
 }
 
 def QuidditchSnitch_CompletedTokenOp
@@ -334,7 +366,8 @@ def QuidditchSnitch_BarrierOp : QuidditchSnitch_Op<"barrier"> {
 }
 
 def QuidditchSnitch_ComputeCoreIndexOp
-  : QuidditchSnitch_Op<"compute_core_index", [Pure]> {
+  : QuidditchSnitch_Op<"compute_core_index", [Pure,
+      QuidditchSnitch_ComputeCoreSpecializationOpInterface]> {
 
   let description = [{
     Returns the index of the compute core within a given cluster.
@@ -347,6 +380,10 @@ def QuidditchSnitch_ComputeCoreIndexOp
 
   let assemblyFormat = [{
     attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    void replaceWithNoop(mlir::RewriterBase& rewriter);
   }];
 }
 
