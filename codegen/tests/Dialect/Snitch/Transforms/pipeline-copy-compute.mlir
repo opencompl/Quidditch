@@ -25,12 +25,12 @@ func.func @test(%arg0: index, %extracted_slice : tensor<1x100xf64>, %14 : tensor
 
     %extracted_slice_6 = tensor.extract_slice %14[%arg2, %arg0] [40, 100] [1, 1] : tensor<1200x400xf64> to tensor<40x100xf64>
     %extracted_slice_7 = tensor.extract_slice %arg3[0, %arg2] [1, 40] [1, 1] : tensor<1x1200xf64> to tensor<1x40xf64>
-    %result_8, %token_9 = quidditch_snitch.start_tensor_copy %extracted_slice to L1 : tensor<1x100xf64>
-    %25 = quidditch_snitch.wait_for_tensor_copy of %extracted_slice to %result_8 using %token_9 : tensor<1x100xf64>
-    %result_10, %token_11 = quidditch_snitch.start_tensor_copy %extracted_slice_6 to L1 : tensor<40x100xf64>
-    %26 = quidditch_snitch.wait_for_tensor_copy of %extracted_slice_6 to %result_10 using %token_11 : tensor<40x100xf64>
-    %result_12, %token_13 = quidditch_snitch.start_tensor_copy %extracted_slice_7 to L1 : tensor<1x40xf64>
-    %27 = quidditch_snitch.wait_for_tensor_copy of %extracted_slice_7 to %result_12 using %token_13 : tensor<1x40xf64>
+    %result_8, %token_9 = quidditch_snitch.start_tensor_copy %extracted_slice to L1 : tensor<1x100xf64> -> tensor<1x100xf64>
+    %25 = quidditch_snitch.wait_for_tensor_copy of %extracted_slice : tensor<1x100xf64> to %result_8 using %token_9 -> tensor<1x100xf64>
+    %result_10, %token_11 = quidditch_snitch.start_tensor_copy %extracted_slice_6 to L1 : tensor<40x100xf64> -> tensor<40x100xf64>
+    %26 = quidditch_snitch.wait_for_tensor_copy of %extracted_slice_6 : tensor<40x100xf64> to %result_10 using %token_11 -> tensor<40x100xf64>
+    %result_12, %token_13 = quidditch_snitch.start_tensor_copy %extracted_slice_7 to L1 : tensor<1x40xf64> -> tensor<1x40xf64>
+    %27 = quidditch_snitch.wait_for_tensor_copy of %extracted_slice_7 : tensor<1x40xf64> to %result_12 using %token_13 -> tensor<1x40xf64>
 
     // CHECK: ^{{.*}}(
     // CHECK-SAME: %[[IV:[[:alnum:]]+]]
@@ -43,9 +43,15 @@ func.func @test(%arg0: index, %extracted_slice : tensor<1x100xf64>, %14 : tensor
     // CHECK-SAME: %[[SLICE2:[[:alnum:]]+]]
     // CHECK-SAME: %[[RESULT2:[[:alnum:]]+]]
     // CHECK-SAME: %[[TOKEN2:[[:alnum:]]+]]
-    // CHECK: %[[OPA:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[ARG1]] to %[[RESULT0]] using %[[TOKEN0]]
-    // CHECK: %[[OPB:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[SLICE1]] to %[[RESULT1]] using %[[TOKEN1]]
-    // CHECK: %[[OPC:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[SLICE2]] to %[[RESULT2]] using %[[TOKEN2]]
+    // CHECK: %[[OPA:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[ARG1]]
+    // CHECK-SAME: to %[[RESULT0]]
+    // CHECK-SAME: using %[[TOKEN0]]
+    // CHECK: %[[OPB:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[SLICE1]]
+    // CHECK-SAME: to %[[RESULT1]]
+    // CHECK-SAME: using %[[TOKEN1]]
+    // CHECK: %[[OPC:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[SLICE2]]
+    // CHECK-SAME: to %[[RESULT2]]
+    // CHECK-SAME: using %[[TOKEN2]]
     // CHECK: %[[RES:.*]] = linalg.matmul_transpose_b
     // CHECK-SAME: ins(%[[OPA]], %[[OPB]] :
     // CHECK-SAME: outs(%[[OPC]] :
