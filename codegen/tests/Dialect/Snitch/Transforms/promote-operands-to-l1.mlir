@@ -1,4 +1,4 @@
-// RUN: quidditch-opt %s -p "builtin.module(func.func(quidditch-promote-operands-to-l1))" | FileCheck %s
+// RUN: quidditch-opt %s -p "builtin.module(func.func(quidditch-promote-operands-to-l1))" --allow-unregistered-dialect | FileCheck %s
 
 // CHECK-LABEL: @test(
 // CHECK-SAME: %[[A:[[:alnum:]]+]]: tensor<32x32xf32>
@@ -20,5 +20,15 @@ func.func @test(%a : tensor<32x32xf32>, %b : tensor<32x32xf32>) -> tensor<32x32x
   // CHECK-SAME: using %[[TOKEN]]
   // CHECK: linalg.matmul ins(%[[A2]], %[[B2]] : {{.*}}) outs(%[[E2]] : {{.*}})
   %r = linalg.matmul ins(%a, %b : tensor<32x32xf32>, tensor<32x32xf32>) outs(%e : tensor<32x32xf32>) -> tensor<32x32xf32>
+  return %r : tensor<32x32xf32>
+}
+
+// CHECK-LABEL: @test_dominance(
+// CHECK-SAME: %[[A:[[:alnum:]]+]]
+func.func @test_dominance(%a : tensor<32x32xf32>) -> tensor<32x32xf32> {
+  // CHECK: "test.use"(%[[A]])
+  "test.use"(%a) : (tensor<32x32xf32>) -> ()
+  %e = bufferization.alloc_tensor() : tensor<32x32xf32>
+  %r = linalg.abs ins(%a : tensor<32x32xf32>) outs(%e : tensor<32x32xf32>) -> tensor<32x32xf32>
   return %r : tensor<32x32xf32>
 }

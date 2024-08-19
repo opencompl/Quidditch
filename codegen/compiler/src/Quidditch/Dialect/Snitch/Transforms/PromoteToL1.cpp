@@ -41,20 +41,19 @@ void PromoteOperandsToL1::runOnOperation() {
   // Copy all tensors used as operands to compute ops into L1 memory.
   getOperation()->walk([&](TilingInterface computeOp) {
     // Note: This can create redundant copies that must be cleaned up by CSE.
-    SetVector<TypedValue<RankedTensorType>> nonL1Uses;
-    for (Value operand : computeOp->getOperands())
-      if (isa<RankedTensorType>(operand.getType()))
-        nonL1Uses.insert(cast<TypedValue<RankedTensorType>>(operand));
+    SmallVector<OpOperand *> nonL1Uses;
+    for (OpOperand &operand : computeOp->getOpOperands())
+      if (isa<RankedTensorType>(operand.get().getType()))
+        nonL1Uses.push_back(&operand);
 
     auto builder = OpBuilder(computeOp);
-    for (TypedValue<RankedTensorType> value : nonL1Uses) {
+    for (OpOperand *use : nonL1Uses) {
       auto copyOp = builder.create<StartTensorCopyOp>(computeOp.getLoc(),
-                                                      /*copy=*/value);
+                                                      /*copy=*/use->get());
       auto waitOp = builder.create<WaitForTensorCopyOp>(
           computeOp.getLoc(), copyOp.getResult(), copyOp.getToken(),
-          /*copy=*/value);
-      value.replaceAllUsesExcept(waitOp.getResult(),
-                                 SmallPtrSet<Operation *, 2>{copyOp, waitOp});
+          /*copy=*/use->get());
+      use->set(waitOp);
     }
   });
 }
