@@ -355,6 +355,14 @@ void MemRefMicrokernelOp::getCanonicalizationPatterns(
 }
 
 //===----------------------------------------------------------------------===//
+// MemRefMicrokernelOp::ComputeCoreSpecializationOpInterface
+//===----------------------------------------------------------------------===//
+
+void MemRefMicrokernelOp::replaceWithNoop(RewriterBase &rewriter) {
+  rewriter.eraseOp(*this);
+}
+
+//===----------------------------------------------------------------------===//
 // CallMicrokernelOp
 //===----------------------------------------------------------------------===//
 
@@ -378,6 +386,14 @@ LogicalResult CallMicrokernelOp::verify() {
     return emitOpError("do not support functions with signature ")
            << FunctionType::get(getContext(), getInputs().getTypes(), {});
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// MicrokernelFenceOp::ComputeCoreSpecializationOpInterface
+//===----------------------------------------------------------------------===//
+
+void MicrokernelFenceOp::replaceWithNoop(RewriterBase &rewriter) {
+  rewriter.eraseOp(*this);
 }
 
 //===----------------------------------------------------------------------===//
@@ -738,6 +754,22 @@ OpFoldResult StartDMATransferOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// StartDMATransferOp::DMACoreSpecializationOpInterface
+//===----------------------------------------------------------------------===//
+
+void StartDMATransferOp::replaceWithNoop(RewriterBase &rewriter) {
+  rewriter.replaceOpWithNewOp<CompletedTokenOp>(*this);
+}
+
+//===----------------------------------------------------------------------===//
+// StartZeroMemTransferOp::DMACoreSpecializationOpInterface
+//===----------------------------------------------------------------------===//
+
+void StartZeroMemTransferOp::replaceWithNoop(RewriterBase &rewriter) {
+  rewriter.replaceOpWithNewOp<CompletedTokenOp>(*this);
+}
+
+//===----------------------------------------------------------------------===//
 // WaitForDMATransfersOp
 //===----------------------------------------------------------------------===//
 
@@ -762,6 +794,28 @@ LogicalResult WaitForDMATransfersOp::canonicalize(WaitForDMATransfersOp op,
 
   rewriter.eraseOp(op);
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// WaitForDMATransfersOp::DMACoreSpecializationOpInterface
+//===----------------------------------------------------------------------===//
+
+void WaitForDMATransfersOp::replaceWithNoop(RewriterBase &rewriter) {
+  rewriter.eraseOp(*this);
+}
+
+//===----------------------------------------------------------------------===//
+// ComputeCoreIndexOp::ComputeCoreSpecializationOpInterface
+//===----------------------------------------------------------------------===//
+
+void ComputeCoreIndexOp::replaceWithNoop(RewriterBase &rewriter) {
+  // Make the DMA core follow the control flow of the first compute core.
+  // This whole pass runs under the assumption that any operation that is
+  // run on either the DMA core or compute cores are in non-divergent
+  // control flow. Making the DMA core follow any compute cores control
+  // flow is therefore safe to do.
+  // This is mainly required for barriers within a `scf.forall`.
+  rewriter.replaceOpWithNewOp<arith::ConstantIndexOp>(*this, 0);
 }
 
 //===----------------------------------------------------------------------===//

@@ -10,6 +10,7 @@
 #include "mlir/Interfaces/LoopLikeInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+#include "QuidditchSnitchInterfaces.h"
 #include "QuidditchSnitchTypes.h"
 
 #define GET_OP_CLASSES
