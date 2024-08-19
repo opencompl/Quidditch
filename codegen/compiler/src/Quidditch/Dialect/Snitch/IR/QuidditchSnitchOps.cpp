@@ -1,6 +1,7 @@
 #include "QuidditchSnitchOps.h"
 
 #include "llvm/ADT/ScopeExit.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -383,13 +384,64 @@ LogicalResult CallMicrokernelOp::verify() {
 // StartTensorCopyOp
 //===----------------------------------------------------------------------===//
 
+LogicalResult StartTensorCopyOp::verify() {
+  if (getStaticHighPadAttr())
+    if (getStaticHighPadAttr().size() != getCopy().getType().getRank())
+      return emitOpError("expected padding number for every dimension");
+
+  unsigned numDynamicPads = llvm::count(
+      getStaticHighPad().value_or(std::nullopt), ShapedType::kDynamic);
+  if (numDynamicPads != getHighPad().size())
+    return emitOpError("expected ")
+           << numDynamicPads << " dynamic padding values";
+
+  return success();
+}
+
 LogicalResult StartTensorCopyOp::fold(FoldAdaptor adaptor,
                                       SmallVectorImpl<OpFoldResult> &results) {
+  if (hasPadding()) {
+    // Remove noop padding.
+    if (llvm::all_of(getStaticHighPadAttr().asArrayRef(),
+                     [](int64_t value) { return value == 0; })) {
+      removeStaticHighPadAttr();
+      return success();
+    }
+
+    // Fold dynamic indices with constant values into the static list.
+    {
+      bool changed = false;
+      SmallVector<int64_t> padding =
+          llvm::to_vector(getStaticHighPadAttr().asArrayRef());
+      unsigned dynamicIndex = 0;
+      for (int64_t &value : padding) {
+        if (!ShapedType::isDynamic(value))
+          continue;
+
+        if (auto integer = dyn_cast_or_null<IntegerAttr>(
+                adaptor.getHighPad()[dynamicIndex])) {
+          value = integer.getValue().getZExtValue();
+          getHighPadMutable().erase(dynamicIndex);
+          changed = true;
+        } else {
+          dynamicIndex++;
+        }
+      }
+      if (changed) {
+        setStaticHighPad(padding);
+        return success();
+      }
+    }
+  }
+
   auto waitOp = getCopy().getDefiningOp<WaitForTensorCopyOp>();
   if (!waitOp)
     return failure();
   auto copyOp = waitOp.getTransferTensor().getDefiningOp<StartTensorCopyOp>();
   if (!copyOp)
+    return failure();
+  if (copyOp.getStaticHighPadAttr() != getStaticHighPadAttr() ||
+      copyOp.getHighPad() != getHighPad())
     return failure();
 
   results.emplace_back(waitOp);
@@ -397,20 +449,33 @@ LogicalResult StartTensorCopyOp::fold(FoldAdaptor adaptor,
   return success();
 }
 
+SmallVector<OpFoldResult> StartTensorCopyOp::getMixedHighPad() {
+  Builder builder(getContext());
+  if (!hasPadding())
+    return SmallVector<OpFoldResult>(getResult().getType().getRank(),
+                                     builder.getIndexAttr(0));
+
+  return getMixedValues(getStaticHighPadAttr().asArrayRef(), getHighPad(),
+                        builder);
+}
+
 //===----------------------------------------------------------------------===//
 // StartTensorCopyOp::BufferizableOpInterface
 //===----------------------------------------------------------------------===//
 
-/// Returns whether 'copy' is already in L1 memory.
+/// Returns whether the allocation can be elided entirely.
 /// Returns an empty optional if it was not possible to determine.
-static std::optional<bool>
-isInL1Memory(Value copy,
-             const bufferization::BufferizationOptions &options = {},
-             SmallVector<Value> *invocationStack = nullptr) {
+std::optional<bool> StartTensorCopyOp::elidesAllocation(
+    const bufferization::BufferizationOptions &options,
+    SmallVector<Value> *invocationStack) {
+  // Padding cannot be elided in general, even if the copied buffer is in L1.
+  if (hasPadding())
+    return false;
+
   FailureOr<BaseMemRefType> copyType =
       invocationStack
-          ? bufferization::getBufferType(copy, options, *invocationStack)
-          : bufferization::getBufferType(copy, options);
+          ? bufferization::getBufferType(getCopy(), options, *invocationStack)
+          : bufferization::getBufferType(getCopy(), options);
   if (failed(copyType))
     return std::nullopt;
 
@@ -421,7 +486,7 @@ bool StartTensorCopyOp::resultBufferizesToMemoryWrite(
     OpResult opResult, const bufferization::AnalysisState &state) {
   assert(opResult == getResult() && "no other result");
 
-  std::optional<bool> matches = isInL1Memory(getCopy(), state.getOptions());
+  std::optional<bool> matches = elidesAllocation(state.getOptions());
   // Conservative answer.
   if (!matches)
     return true;
@@ -435,7 +500,7 @@ bool StartTensorCopyOp::bufferizesToMemoryRead(
     OpOperand &opOperand, const bufferization::AnalysisState &state) {
   assert(opOperand == getCopyMutable() && "have only one operand");
 
-  std::optional<bool> result = isInL1Memory(getCopy(), state.getOptions());
+  std::optional<bool> result = elidesAllocation(state.getOptions());
   // Conservative answer.
   if (!result)
     return true;
@@ -456,7 +521,7 @@ AliasingValueList StartTensorCopyOp::getAliasingValues(
     OpOperand &opOperand, const bufferization::AnalysisState &state) {
   assert(opOperand == getCopyMutable() && "have only one operand");
 
-  std::optional<bool> result = isInL1Memory(getCopy(), state.getOptions());
+  std::optional<bool> result = elidesAllocation(state.getOptions());
   if (!result)
     // Assume the worst case.
     return {{getResult(), BufferRelation::Equivalent, /*isDefinite=*/false}};
@@ -472,7 +537,7 @@ AliasingValueList StartTensorCopyOp::getAliasingValues(
 bool StartTensorCopyOp::bufferizesToAllocation(Value value) {
   assert(value == getResult() && "have only one result");
 
-  if (isInL1Memory(getCopy()) == true)
+  if (elidesAllocation() == true)
     return false;
 
   // True is the conservative reply, according to the docs.
@@ -487,7 +552,7 @@ StartTensorCopyOp::getBufferType(Value value,
 
   bool contained = llvm::is_contained(invocationStack, value);
   if (!contained)
-    if (isInL1Memory(getCopy(), options, &invocationStack) == true)
+    if (elidesAllocation(options, &invocationStack) == true)
       return bufferization::getBufferType(getCopy(), options, invocationStack);
 
   // Unless contained in the invocation stack (where we are free to impose the
@@ -514,7 +579,7 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
   if (failed(copyBuffer))
     return failure();
 
-  std::optional<bool> result = isInL1Memory(getCopy(), options);
+  std::optional<bool> result = elidesAllocation(options);
   if (!result)
     return failure();
 
@@ -530,12 +595,20 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
   if (failed(allocType))
     return failure();
 
+  SmallVector<OpFoldResult> copyBufferSizes =
+      memref::getMixedSizes(rewriter, getLoc(), *copyBuffer);
+
+  // Compute the dynamic dimensions for the allocation.
   SmallVector<Value> dynamicDims;
-  for (auto [index, shape] : llvm::enumerate(allocType->getShape())) {
+  for (auto [index, shape, pad] :
+       llvm::enumerate(allocType->getShape(), getMixedHighPad())) {
     if (!ShapedType::isDynamic(shape))
       continue;
-    dynamicDims.push_back(
-        rewriter.create<memref::DimOp>(getLoc(), *copyBuffer, index));
+
+    dynamicDims.push_back(affine::makeComposedAffineApply(
+        rewriter, getLoc(),
+        rewriter.getAffineDimExpr(0) + rewriter.getAffineDimExpr(1),
+        ArrayRef<OpFoldResult>{copyBufferSizes[index], pad}));
   }
 
   FailureOr<Value> alloc = options.createAlloc(
@@ -544,8 +617,25 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
   if (failed(alloc))
     return failure();
 
+  // Zero out the entire buffer prior to overwriting it with the copied values.
+  // TODO: This could be optimized to only zero regions that won't be filled
+  //  with the copied values at the cost of 2^rank transfers instead of two.
+  if (hasPadding())
+    rewriter.create<StartZeroMemTransferOp>(getLoc(), *alloc);
+
+  // Subview into the original memory without any padding.
+  // As we only add padding at the end of the dimensions, the offsets are always
+  // zero.
+  Value destination = rewriter.create<memref::SubViewOp>(
+      getLoc(), *alloc,
+      /*offsets=*/
+      SmallVector<OpFoldResult>(allocType->getRank(), rewriter.getIndexAttr(0)),
+      copyBufferSizes,
+      /*strides=*/
+      SmallVector<OpFoldResult>(allocType->getRank(),
+                                rewriter.getIndexAttr(1)));
   Value token =
-      rewriter.create<StartDMATransferOp>(getLoc(), *copyBuffer, *alloc);
+      rewriter.create<StartDMATransferOp>(getLoc(), *copyBuffer, destination);
 
   // Replace op.
   replaceOpWithBufferizedValues(rewriter, getOperation(), {*alloc, token});

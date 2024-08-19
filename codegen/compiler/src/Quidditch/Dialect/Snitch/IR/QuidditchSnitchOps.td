@@ -163,24 +163,32 @@ def QuidditchSnitch_MicrokernelFenceOp : QuidditchSnitch_Op<"microkernel_fence">
 }
 
 def QuidditchSnitch_StartTensorCopyOp : QuidditchSnitch_Op<"start_tensor_copy",
-  [AllTypesMatch<["copy", "result"]>, Pure,
+  [Pure, AllRanksMatch<["copy", "result"]>,
    DeclareOpInterfaceMethods<BufferizableOpInterface,
     ["resultBufferizesToMemoryWrite", "bufferizesToMemoryRead",
      "bufferizesToMemoryWrite", "getAliasingValues", "getBufferType",
       "bufferize", "bufferizesToAllocation"]>]> {
 
   let description = [{
-    Operation starting a copy of a tensor to L1 memory space returning it as
-    a new tensor.
-    The contained values of the tensor in an unspecified state.
+    Operation starting a copy of a tensor to L1 memory space, optionally adding
+    padding and returning it as a new tensor.
+    The contained values of the resulting tensor is in an unspecified state.
     See `wait_for_tensor_copy` to transform the tensor value into a state
     equal to `$copy`.
 
-    This operation is a noop if `$copy` and `$result` are already in L1 and
-    bufferization can elide the copy.
+    The operation may optionally add padding at the end of each dimension of
+    the tensor. Zero is used as the padding value.
+    The dimensions of the result tensor are computed using
+    `dims(copy)[i] + high_pad[i]`.
+
+    This operation is a noop if `$copy` is already in L1, no padding is added,
+    and bufferization can elide the copy.
   }];
 
-  let arguments = (ins AnyRankedTensor:$copy);
+  let arguments = (ins AnyRankedTensor:$copy,
+                       Variadic<Index>:$high_pad,
+                       OptionalAttr<DenseI64ArrayAttr>:$static_high_pad
+  );
 
   let results = (outs
     AnyRankedTensor:$result,
@@ -188,14 +196,41 @@ def QuidditchSnitch_StartTensorCopyOp : QuidditchSnitch_Op<"start_tensor_copy",
   );
 
   let assemblyFormat = [{
-    $copy `to` `L1` `:` type($copy) attr-dict
+    $copy `to` `L1`
+    ( `pad` `with` `zero` `to`
+      custom<DynamicIndexList>($high_pad, $static_high_pad)^)?
+    `:` type($copy) `->` type($result) attr-dict
+  }];
+
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$copy), [{
+      build($_builder, $_state, copy.getType(),
+            $_builder.getType<DMATokenType>(), copy,
+            /*high_pad=*/mlir::ValueRange(), /*static_high_pad=*/nullptr);
+    }]>
+  ];
+
+  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+  private:
+    std::optional<bool>
+    elidesAllocation(const mlir::bufferization::BufferizationOptions &options = {},
+                      llvm::SmallVector<mlir::Value> *invocationStack = nullptr);
+  public:
+
+    bool hasPadding() {
+      return static_cast<bool>(getStaticHighPadAttr());
+    }
+
+    llvm::SmallVector<mlir::OpFoldResult> getMixedHighPad();
   }];
 
   let hasFolder = 1;
 }
 
 def QuidditchSnitch_WaitForTensorCopyOp : QuidditchSnitch_Op<"wait_for_tensor_copy",
-  [AllTypesMatch<["transfer_tensor", "result", "copy"]>, Pure,
+  [AllTypesMatch<["transfer_tensor", "result"]>, Pure,
    DeclareOpInterfaceMethods<BufferizableOpInterface,
     ["bufferizesToMemoryRead", "bufferizesToMemoryWrite", "getAliasingValues",
      "bufferize", "mustBufferizeInPlace", "isNotConflicting"]>]> {
@@ -228,7 +263,7 @@ def QuidditchSnitch_WaitForTensorCopyOp : QuidditchSnitch_Op<"wait_for_tensor_co
   );
 
   let assemblyFormat = [{
-    `of` $copy `to` $transfer_tensor `using` $token `:` type($transfer_tensor) attr-dict
+    `of` $copy `:` type($copy) `to` $transfer_tensor `using` $token `->` type($transfer_tensor) attr-dict
   }];
 
   let hasFolder = 1;
