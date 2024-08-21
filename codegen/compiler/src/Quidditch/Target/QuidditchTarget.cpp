@@ -175,12 +175,11 @@ public:
     FunctionLikeNest(modulePassManager)
         .addPass([] { return createTileAndDistributeToWorkgroupsPass(); })
         .addPass([] { return createConvertToDestinationPassingStylePass(); })
+        .addPass(quidditch::createPadToTilingConfigPass)
         .addPass(createFoldAffineMinInDistributedLoopsPass)
         .addPass(quidditch::createRemoveTrivialLoopsPass)
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
-        .addPass(createFuseTensorPadWithConsumerPass)
-        .addPass(createConcretizePadResultShapePass)
         .addPass([] {
           return quidditch::createTensorTilePass(
               {quidditch::TilingLevel::Reduction});
@@ -190,7 +189,11 @@ public:
         .addPass([] {
           return quidditch::createTensorTilePass({quidditch::TilingLevel::L1});
         })
+        .addPass(createFuseTensorPadWithConsumerPass)
+        .addPass(createConcretizePadResultShapePass)
         .addPass(quidditch::Snitch::createPromoteOperandsToL1Pass)
+        .addPass(createCanonicalizerPass)
+        .addPass(createCSEPass)
         .addPass(quidditch::Snitch::createPipelineCopyComputePass)
         // TODO: Fuse scf.forall after.
         .addPass([] {

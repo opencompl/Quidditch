@@ -23,6 +23,7 @@ def DisableQuidditchVariantPass : Pass<"quidditch-disable-variant",
 }
 
 def ReluToMaxPass : Pass<"quidditch-relu-to-max">;
+def PadToTilingConfigPass : Pass<"quidditch-pad-to-tiling-config">;
 
 def ConfigureForSnitchPass
   : InterfacePass<"quidditch-configure-for-snitch",

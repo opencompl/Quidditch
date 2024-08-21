@@ -25,6 +25,7 @@ iree_cc_library(
         "ConfigureForSnitch.cpp"
         "DisableQuidditchVariant.cpp"
         "LinkExecutables.cpp"
+        "PadToTilingConfig.cpp"
         "ReluToMax.cpp"
         "RemoveTrivialLoops.cpp"
         "TensorTile.cpp"
