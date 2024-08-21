@@ -22,7 +22,7 @@ func.func @test_zero_f32(%a : tensor<32x32xf32>) -> tensor<33x33xf32> {
 func.func @test_poison(%a : tensor<32x32xf32>) -> tensor<33x33xf32> {
   %c = ub.poison : f32
   // CHECK: %[[R:.*]], %[[T:.*]] = quidditch_snitch.start_tensor_copy %[[A]]
-  // CHECK-SAME: pad with zero to [1, 1]
+  // CHECK-SAME: pad with undef to [1, 1]
   // CHECK: %[[R2:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[A]]
   // CHECK-SAME: to %[[R]]
   // CHECK-SAME: using %[[T]]
