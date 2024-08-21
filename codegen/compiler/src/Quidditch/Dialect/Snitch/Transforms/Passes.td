@@ -10,6 +10,17 @@ def FormMicrokernelsPass
   ];
 }
 
+def PromotePadsToL1Pass : Pass<"quidditch-promote-pads-to-l1"> {
+  let description = [{
+    Converts supported `tensor.pad` operations to `start_tensor_transfer` and
+    `wait_for_tensor_copy` pairs.
+  }];
+
+  let dependentDialects = [
+    "quidditch::Snitch::QuidditchSnitchDialect",
+  ];
+}
+
 def PromoteOperandsToL1Pass : Pass<"quidditch-promote-operands-to-l1"> {
   let description = [{
     TODO:

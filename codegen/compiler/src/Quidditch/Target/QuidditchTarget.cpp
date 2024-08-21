@@ -180,6 +180,8 @@ public:
         .addPass(quidditch::createRemoveTrivialLoopsPass)
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
+        .addPass(createFuseTensorPadWithConsumerPass)
+        .addPass(createConcretizePadResultShapePass)
         .addPass([] {
           return quidditch::createTensorTilePass(
               {quidditch::TilingLevel::Reduction});
@@ -191,6 +193,7 @@ public:
         })
         .addPass(createFuseTensorPadWithConsumerPass)
         .addPass(createConcretizePadResultShapePass)
+        .addPass(quidditch::Snitch::createPromotePadsToL1Pass)
         .addPass(quidditch::Snitch::createPromoteOperandsToL1Pass)
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
