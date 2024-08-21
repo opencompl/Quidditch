@@ -60,6 +60,14 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
         bool dualBuffer = false;
 
         if (funcOp.getName() ==
+            "main$async_dispatch_9_matmul_transpose_b_1x161x600_f64") {
+          workgroupTiles[2] = 100;
+
+          l1Tiles[0] = 0;
+          l1Tiles[1] = 56;
+          dualBuffer = true;
+        }
+        if (funcOp.getName() ==
             "main$async_dispatch_0_matmul_transpose_b_1x400x161_f64") {
           l1Tiles[1] = 40;
           l1Tiles[2] = 0;
