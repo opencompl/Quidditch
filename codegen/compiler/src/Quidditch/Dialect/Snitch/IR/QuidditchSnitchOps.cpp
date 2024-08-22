@@ -636,7 +636,7 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
   // Zero out the entire buffer prior to overwriting it with the copied values.
   // TODO: This could be optimized to only zero regions that won't be filled
   //  with the copied values at the cost of 2^rank transfers instead of two.
-  if (hasPadding())
+  if (hasPadding() && !getUndefPadding())
     rewriter.create<StartZeroMemTransferOp>(getLoc(), *alloc);
 
   // Subview into the original memory without any padding.

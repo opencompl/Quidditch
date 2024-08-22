@@ -101,17 +101,20 @@ void PromotePadsToL1::runOnOperation() {
     if (!constant)
       return;
 
-    // 'start_tensor_copy' only supports zero-padding right now.
+    // 'start_tensor_copy' supports zero-padding and undef-padding right now.
     // Poison (undef) can also be lowered to perform zero-padding.
     if (!matchPattern(constant, m_NonZero()) &&
         !matchPattern(constant, m_PosZeroFloat()) &&
         !matchPattern(constant, m_Constant<ub::PoisonAttr>(nullptr)))
       return;
+    bool undefPadding =
+        matchPattern(constant, m_Constant<ub::PoisonAttr>(nullptr));
 
     OpBuilder builder(padOp);
     auto copyOp = builder.create<StartTensorCopyOp>(
         padOp.getLoc(), padOp.getType(), builder.getType<DMATokenType>(),
-        padOp.getSource(), padOp.getHigh(), padOp.getStaticHighAttr());
+        padOp.getSource(), padOp.getHigh(), padOp.getStaticHighAttr(),
+        undefPadding);
     auto waitOp = builder.create<WaitForTensorCopyOp>(
         padOp.getLoc(), copyOp.getResult(), copyOp.getToken(),
         /*copy=*/padOp.getSource());

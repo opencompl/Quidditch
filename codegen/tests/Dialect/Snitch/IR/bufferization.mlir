@@ -165,3 +165,26 @@ func.func @tensor_copy_pad(%arg0 : tensor<?x?xf32>, %pad0 : index, %pad1 : index
   // CHECK: return %[[TENSOR]], %[[TOKEN]]
   return %r, %t : tensor<?x?xf32>, !quidditch_snitch.dma_token
 }
+
+// CHECK-LABEL: @tensor_copy_pad_undef
+// CHECK-SAME: %[[ARG0:[[:alnum:]]+]]
+// CHECK-SAME: %[[PAD0:[[:alnum:]]+]]
+// CHECK-SAME: %[[PAD1:[[:alnum:]]+]]
+func.func @tensor_copy_pad_undef(%arg0 : tensor<?x?xf32>, %pad0 : index, %pad1 : index) -> (tensor<?x?xf32>, !quidditch_snitch.dma_token) {
+  // CHECK: %[[COPY:.*]] = bufferization.to_memref %[[ARG0]]
+  // CHECK: %[[ZERO:.*]] = arith.constant 0
+  // CHECK: %[[DIM0:.*]] = memref.dim %[[COPY]], %[[ZERO]]
+  // CHECK: %[[ONE:.*]] = arith.constant 1
+  // CHECK: %[[DIM1:.*]] = memref.dim %[[COPY]], %[[ONE]]
+  // CHECK: %[[NEW_DIM0:.*]] = affine.apply #[[$MAP2]]()[%[[DIM0]], %[[PAD0]]]
+  // CHECK: %[[NEW_DIM1:.*]] = affine.apply #[[$MAP2]]()[%[[DIM1]], %[[PAD1]]]
+  // CHECK: %[[ALLOC:.*]] = memref.alloc(%[[NEW_DIM0]], %[[NEW_DIM1]])
+  // CHECK-NOT: start_zero_mem_transfer
+  // CHECK: %[[UNPADDED:.*]] = memref.subview %[[ALLOC]][0, 0] [%[[DIM0]], %[[DIM1]]] [1, 1]
+  // CHECK-NEXT: %[[TOKEN:.*]] = quidditch_snitch.start_dma_transfer from %[[COPY]]
+  // CHECK-SAME: to %[[UNPADDED]]
+  %r, %t = quidditch_snitch.start_tensor_copy %arg0 to L1 pad with undef to [%pad0, %pad1] : tensor<?x?xf32> -> tensor<?x?xf32>
+  // CHECK: %[[TENSOR:.*]] = bufferization.to_tensor %[[ALLOC]]
+  // CHECK: return %[[TENSOR]], %[[TOKEN]]
+  return %r, %t : tensor<?x?xf32>, !quidditch_snitch.dma_token
+}

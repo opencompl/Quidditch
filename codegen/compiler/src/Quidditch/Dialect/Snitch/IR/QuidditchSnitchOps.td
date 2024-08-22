@@ -199,7 +199,8 @@ def QuidditchSnitch_StartTensorCopyOp : QuidditchSnitch_Op<"start_tensor_copy",
 
   let arguments = (ins AnyRankedTensor:$copy,
                        Variadic<Index>:$high_pad,
-                       OptionalAttr<DenseI64ArrayAttr>:$static_high_pad
+                       OptionalAttr<DenseI64ArrayAttr>:$static_high_pad,
+                       UnitAttr:$undef_padding
   );
 
   let results = (outs
@@ -209,7 +210,7 @@ def QuidditchSnitch_StartTensorCopyOp : QuidditchSnitch_Op<"start_tensor_copy",
 
   let assemblyFormat = [{
     $copy `to` `L1`
-    ( `pad` `with` `zero` `to`
+    ( `pad` `with` (`undef` $undef_padding^) : (`zero`)? `to`
       custom<DynamicIndexList>($high_pad, $static_high_pad)^)?
     `:` type($copy) `->` type($result) attr-dict
   }];
