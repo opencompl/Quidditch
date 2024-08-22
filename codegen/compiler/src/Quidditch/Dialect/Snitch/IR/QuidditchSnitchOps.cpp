@@ -456,8 +456,10 @@ LogicalResult StartTensorCopyOp::fold(FoldAdaptor adaptor,
   auto copyOp = waitOp.getTransferTensor().getDefiningOp<StartTensorCopyOp>();
   if (!copyOp)
     return failure();
-  if (copyOp.getStaticHighPadAttr() != getStaticHighPadAttr() ||
-      copyOp.getHighPad() != getHighPad())
+
+  if (hasPadding() &&
+      (copyOp.getStaticHighPadAttr() != getStaticHighPadAttr() ||
+       copyOp.getHighPad() != getHighPad()))
     return failure();
 
   results.emplace_back(waitOp);
