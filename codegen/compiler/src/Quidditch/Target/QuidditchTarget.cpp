@@ -183,12 +183,6 @@ public:
         .addPass(createFuseTensorPadWithConsumerPass)
         .addPass(createConcretizePadResultShapePass)
         .addPass([] {
-          return quidditch::createTensorTilePass(
-              {quidditch::TilingLevel::Reduction});
-        })
-        .addPass(createCanonicalizerPass)
-        .addPass(createCSEPass)
-        .addPass([] {
           return quidditch::createTensorTilePass({quidditch::TilingLevel::L1});
         })
         .addPass(createFuseTensorPadWithConsumerPass)
@@ -197,6 +191,7 @@ public:
         .addPass(quidditch::Snitch::createPromoteOperandsToL1Pass)
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
+        .addPass(createLoopInvariantCodeMotionPass)
         .addPass(quidditch::Snitch::createPipelineCopyComputePass)
         // TODO: Fuse scf.forall after.
         .addPass([] {
@@ -205,7 +200,6 @@ public:
         })
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
-        .addPass(createLoopInvariantCodeMotionPass)
         .addPass(quidditch::Snitch::createFormMicrokernelsPass);
 
     BufferizationOptions::AllocationFn allocationFn =

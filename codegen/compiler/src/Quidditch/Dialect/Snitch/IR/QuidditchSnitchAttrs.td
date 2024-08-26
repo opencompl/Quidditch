@@ -48,6 +48,7 @@ def TileSizeList : OptionalArrayRefParameter<"int64_t"> {
     $_printer << "[" << $_self << "]"
   }];
 }
+defvar TileInterchangeList = TileSizeList;
 
 def QuidditchSnitch_LoweringConfigAttr : QuidditchSnitch_Attr<"LoweringConfig",
   [DeclareAttrInterfaceMethods<IREECodegen_LoweringConfigAttrInterface, [
@@ -63,6 +64,7 @@ def QuidditchSnitch_LoweringConfigAttr : QuidditchSnitch_Attr<"LoweringConfig",
   let parameters = (ins
     TileSizeList:$workgroup_tiles,
     TileSizeList:$l1_tiles,
+    TileInterchangeList:$l1_tiles_interchange,
     DefaultValuedParameter<"bool", "false">:$dual_buffer
   );
 
@@ -70,6 +72,7 @@ def QuidditchSnitch_LoweringConfigAttr : QuidditchSnitch_Attr<"LoweringConfig",
     AttrBuilder<(ins
       CArg<"llvm::ArrayRef<int64_t>", "{}">:$workgroupTiles,
       CArg<"llvm::ArrayRef<int64_t>", "{}">:$l1Tiles,
+      CArg<"llvm::ArrayRef<int64_t>", "{}">:$l1TilesInterchange,
       CArg<"bool", "false">:$dualBuffer
     )>
   ];

@@ -33,11 +33,11 @@ def TensorTilePass : InterfacePass<"quidditch-tensor-tile",
   "mlir::FunctionOpInterface"> {
   let options = [
     Option<"tilingLevel", "tiling-level", "quidditch::TilingLevel",
-           /*default=*/"quidditch::TilingLevel::Reduction",
+           /*default=*/"quidditch::TilingLevel::L1",
            "Tiling level to tile. Supported levels are 'reduction' and 'thread'",
            [{llvm::cl::values(
-              clEnumValN(quidditch::TilingLevel::Reduction, "reduction",
-                         "Tile and fuse all annotated ops to serial loops"),
+              clEnumValN(quidditch::TilingLevel::L1, "l1",
+                         "Tile and fuse all annotated ops to fit into L1 memory"),
               clEnumValN(quidditch::TilingLevel::Thread, "thread",
                          "Tile and fuse all annotated ops to threads")
            )}]>,

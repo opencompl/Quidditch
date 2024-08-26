@@ -7,9 +7,6 @@
 namespace quidditch {
 
 enum class TilingLevel {
-  /// Applies any reduction tiling that was specified in the workgroup tile
-  /// sizes list but could not be be performed by workgroup tiling.
-  Reduction,
   /// Performs tiling within a workgroup to fit all tensors required for the
   /// root operation into L1.
   L1,
