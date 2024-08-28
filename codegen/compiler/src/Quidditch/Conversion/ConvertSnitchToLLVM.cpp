@@ -145,24 +145,7 @@ struct StartDMATransferOp1DLowering
                                               });
   }
 };
-} // namespace
 
-static StridedLayoutAttr identityStride(MemRefType type) {
-  SmallVector<int64_t> strides{1};
-  for (int64_t dim : llvm::reverse(type.getShape().drop_back())) {
-    if (ShapedType::isDynamic(dim))
-      break;
-    strides.push_back(strides.back() * dim);
-  }
-
-  while (strides.size() < type.getShape().size())
-    strides.push_back(ShapedType::kDynamic);
-
-  std::reverse(strides.begin(), strides.end());
-  return StridedLayoutAttr::get(type.getContext(), 0, strides);
-}
-
-namespace {
 struct StartDMATransferOp2DLowering
     : ConvertOpToLLVMPattern<StartDMATransferOp> {
 
