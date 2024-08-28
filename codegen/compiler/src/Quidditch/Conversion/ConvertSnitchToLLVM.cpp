@@ -121,10 +121,10 @@ struct StartDMATransferOp1DLowering
 
     MemRefType sourceMemRef = op.getSource().getType();
     SmallVector<Value> dynamicSizes;
-    for (std::int64_t dim : sourceMemRef.getShape())
+    for (auto [index, dim] : llvm::enumerate(sourceMemRef.getShape()))
       if (ShapedType::isDynamic(dim))
         dynamicSizes.push_back(
-            sourceDescriptor.size(rewriter, op->getLoc(), dim));
+            sourceDescriptor.size(rewriter, op->getLoc(), index));
 
     SmallVector<Value> sizes;
     SmallVector<Value> strides;

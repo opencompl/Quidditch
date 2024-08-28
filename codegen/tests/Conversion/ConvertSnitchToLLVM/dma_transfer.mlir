@@ -45,6 +45,26 @@ func.func private @test3(%arg0 : memref<?x4xf32>, %arg1 : memref<?x4xf32, stride
   return %0 : !quidditch_snitch.dma_token
 }
 
+// CHECK-LABEL: @dynamic_inner(
+// CHECK-SAME: %{{[[:alnum:]]+}}
+// CHECK-SAME: %[[ARG0_PTR:[[:alnum:]]+]]
+// CHECK-SAME: %{{[[:alnum:]]+}}
+// CHECK-SAME: %{{[[:alnum:]]+}}
+// CHECK-SAME: %[[ARG0_DIM1:[[:alnum:]]+]]
+func.func private @dynamic_inner(%subview_3 : memref<1x?xf64, strided<[161, 1], offset: ?>>, %subview_5 : memref<1x?xf64, strided<[81, 1]>>) {
+  // CHECK-DAG: %[[NULL:.*]] = llvm.mlir.zero
+  // CHECK-DAG: %[[ONE:.*]] = llvm.mlir.constant(1 :
+  // CHECK: %[[SIZE:.*]] = llvm.mul %[[ARG0_DIM1]], %[[ONE]]
+  // CHECK: %[[GEP:.*]] = llvm.getelementptr %[[NULL]][%[[SIZE]]]
+  // CHECK: %[[BYTES:.*]] = llvm.ptrtoint %[[GEP]]
+  // CHECK: call @snrt_dma_start_1d(
+  // CHECK-SAME: %{{[[:alnum:]]+}}
+  // CHECK-SAME: %{{[[:alnum:]]+}}
+  // CHECK-SAME: %[[BYTES]]
+  %12 = quidditch_snitch.start_dma_transfer from %subview_3 : memref<1x?xf64, strided<[161, 1], offset: ?>> to %subview_5 : memref<1x?xf64, strided<[81, 1]>>
+  return
+}
+
 // CHECK-LABEL: @test4
 func.func private @test4(%arg0 : memref<1x4xf32>, %arg1 : memref<1x4xf32, strided<[40, 1], offset: ?>>) -> !quidditch_snitch.dma_token {
   // CHECK: llvm.call @snrt_dma_start_1d(
