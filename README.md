@@ -5,6 +5,7 @@
 Only linux is currently supported as a build environment
 
 Building Quidditch requires the following tools to be installed:
+
 * CMake 3.21 or newer
 * A C++17 compiler
 * Python 3
@@ -12,6 +13,7 @@ Building Quidditch requires the following tools to be installed:
 * Docker to install the Quidditch toolchain. See [the toolchain directory for more details](runtime/toolchain/README.md)
 
 Afterward, you can perform a mega build using:
+
 ```shell
 git clone --recursive https://github.com/opencompl/quidditch
 cd quidditch
