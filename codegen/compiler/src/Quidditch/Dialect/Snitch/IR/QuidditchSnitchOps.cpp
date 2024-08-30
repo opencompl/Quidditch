@@ -617,9 +617,10 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
       memref::getMixedSizes(rewriter, getLoc(), *copyBuffer);
 
   // Compute the dynamic dimensions for the allocation.
+  SmallVector<OpFoldResult> mixedHighPad = getMixedHighPad();
   SmallVector<Value> dynamicDims;
   for (auto [index, shape, pad] :
-       llvm::enumerate(allocType->getShape(), getMixedHighPad())) {
+       llvm::enumerate(allocType->getShape(), mixedHighPad)) {
     if (!ShapedType::isDynamic(shape))
       continue;
 
@@ -638,8 +639,31 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
   // Zero out the entire buffer prior to overwriting it with the copied values.
   // TODO: This could be optimized to only zero regions that won't be filled
   //  with the copied values at the cost of 2^rank transfers instead of two.
-  if (hasPadding() && !getUndefPadding())
-    rewriter.create<StartZeroMemTransferOp>(getLoc(), *alloc);
+  if (hasPadding() && !getUndefPadding()) {
+    if (allocType->getRank() >= 32)
+      return emitError("lowering does not support 32 or more dimensions");
+
+    llvm::BitVector addDim(allocType->getRank());
+    for (auto mask : llvm::seq<uint32_t>(1, 1 << addDim.size())) {
+      addDim.setBitsInMask(&mask);
+
+      SmallVector<OpFoldResult> offsets(addDim.size(),
+                                        rewriter.getIndexAttr(0));
+      SmallVector<OpFoldResult> sizes = copyBufferSizes;
+      for (unsigned index : addDim.set_bits()) {
+        offsets[index] = copyBufferSizes[index];
+        sizes[index] = mixedHighPad[index];
+      }
+      Value destination = rewriter.create<memref::SubViewOp>(
+          getLoc(), *alloc,
+          /*offsets=*/
+          offsets, sizes,
+          /*strides=*/
+          SmallVector<OpFoldResult>(allocType->getRank(),
+                                    rewriter.getIndexAttr(1)));
+      rewriter.create<StartZeroMemTransferOp>(getLoc(), destination);
+    }
+  }
 
   // Subview into the original memory without any padding.
   // As we only add padding at the end of the dimensions, the offsets are always

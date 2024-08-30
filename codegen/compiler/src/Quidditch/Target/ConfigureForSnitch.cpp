@@ -70,8 +70,8 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
             "main$async_dispatch_0_matmul_transpose_b_1x400x161_f64") {
           l1Tiles[1] = 40;
           // TODO: Switch to 82 and true once correctness bugs are fixed.
-          l1Tiles[2] = 0;
-          dualBuffer = false;
+          l1Tiles[2] = 82;
+          dualBuffer = true;
         }
         if (funcOp.getName() ==
             "main$async_dispatch_7_matmul_transpose_b_1x600x400_f64") {
