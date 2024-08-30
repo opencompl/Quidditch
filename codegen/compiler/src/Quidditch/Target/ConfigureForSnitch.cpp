@@ -119,8 +119,11 @@ void ConfigureForSnitch::runOnOperation() {
   if (failed(setTranslationInfo(funcOp)))
     return signalPassFailure();
 
-  if (failed(setRootConfig(funcOp, rootOperation)))
-    return signalPassFailure();
+  auto loweringConfig =
+      getLoweringConfig<quidditch::Snitch::LoweringConfigAttr>(rootOperation);
+  if (!loweringConfig)
+    if (failed(setRootConfig(funcOp, rootOperation)))
+      return signalPassFailure();
 
   // The root configuration setting introduces `tensor.dim` operations.
   // Resolve those away.

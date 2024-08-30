@@ -82,5 +82,6 @@ endmacro()
 
 test_executable(HelloWorld PRECOMMIT)
 test_executable(vec_multiply PRECOMMIT)
+test_executable(big_matvec NIGHTLY)
 test_executable(NsNet2 NIGHTLY)
 test_executable(NsNet2LLVM NIGHTLY)
