@@ -574,7 +574,14 @@ private:
 class QuidditchSession final
     : public PluginSession<QuidditchSession, QuidditchTargetOptions,
                            PluginActivationPolicy::DefaultActivated> {
+public:
+  static void registerGlobalDialects(DialectRegistry &registry) {
+    // Required to allow the 'quidditch_snitch' dialect to also be used in
+    // input IR without just being parsed as an 'OpaqueAttr'.
+    registry.insert<quidditch::Snitch::QuidditchSnitchDialect>();
+  }
 
+private:
   void populateHALTargetDevices(IREE::HAL::TargetDeviceList &targets) override {
     targets.add("quidditch_device",
                 []() { return std::make_shared<QuidditchTargetDevice>(); });
