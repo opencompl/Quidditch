@@ -645,6 +645,7 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
 
     llvm::BitVector addDim(allocType->getRank());
     for (auto mask : llvm::seq<uint32_t>(1, 1 << addDim.size())) {
+      addDim.reset();
       addDim.setBitsInMask(&mask);
 
       SmallVector<OpFoldResult> offsets(addDim.size(),
@@ -659,8 +660,7 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
           /*offsets=*/
           offsets, sizes,
           /*strides=*/
-          SmallVector<OpFoldResult>(allocType->getRank(),
-                                    rewriter.getIndexAttr(1)));
+          SmallVector<OpFoldResult>(addDim.size(), rewriter.getIndexAttr(1)));
       rewriter.create<StartZeroMemTransferOp>(getLoc(), destination);
     }
   }
