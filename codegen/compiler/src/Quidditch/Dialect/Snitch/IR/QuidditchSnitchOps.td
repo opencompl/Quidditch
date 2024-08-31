@@ -347,6 +347,8 @@ def QuidditchSnitch_StartZeroMemTransferOp : QuidditchSnitch_Op<"start_zero_mem_
   let extraClassDeclaration = [{
     void replaceWithNoop(mlir::RewriterBase& rewriter);
   }];
+
+  let hasCanonicalizeMethod = 1;
 }
 
 def QuidditchSnitch_WaitForDMATransfersOp

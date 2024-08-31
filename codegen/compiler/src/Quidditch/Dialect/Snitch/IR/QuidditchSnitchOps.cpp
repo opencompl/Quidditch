@@ -644,7 +644,7 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
       return emitError("lowering does not support 32 or more dimensions");
 
     llvm::BitVector addDim(allocType->getRank());
-    for (auto mask : llvm::seq<uint32_t>(1, 1 << addDim.size())) {
+    for (auto mask : llvm::seq<uint32_t>(1, (1 << addDim.size()) - 1)) {
       addDim.reset();
       addDim.setBitsInMask(&mask);
 
@@ -654,6 +654,14 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
       for (unsigned index : addDim.set_bits()) {
         offsets[index] = copyBufferSizes[index];
         sizes[index] = mixedHighPad[index];
+      }
+
+      //
+      if (mask == (1 << addDim.size()) - 2) {
+        sizes.front() = affine::makeComposedFoldedAffineApply(
+            rewriter, getLoc(),
+            rewriter.getAffineDimExpr(0) + rewriter.getAffineDimExpr(1),
+            {sizes.front(), mixedHighPad.front()});
       }
       Value destination = rewriter.create<memref::SubViewOp>(
           getLoc(), *alloc,
@@ -785,6 +793,19 @@ OpFoldResult StartDMATransferOp::fold(FoldAdaptor adaptor) {
 
 void StartDMATransferOp::replaceWithNoop(RewriterBase &rewriter) {
   rewriter.replaceOpWithNewOp<CompletedTokenOp>(*this);
+}
+
+//===----------------------------------------------------------------------===//
+// StartZeroMemTransferOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StartZeroMemTransferOp::canonicalize(StartZeroMemTransferOp op,
+                                                   PatternRewriter &rewriter) {
+  if (llvm::is_contained(op.getFilled().getType().getShape(), 0)) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
