@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "Quidditch/Conversion/ConvertDMAToLLVM.h"
 #include "Quidditch/Conversion/ConvertSnitchToLLVM.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "iree/compiler/Codegen/LLVMCPU/DispatchABI.h"
@@ -1036,6 +1037,7 @@ void ConvertToLLVMPass::runOnOperation() {
   populateVectorToLLVMMatrixConversionPatterns(typeConverter, patterns);
   populateVectorToLLVMConversionPatterns(typeConverter, patterns, false);
   populateSnitchToLLVMConversionPatterns(module, typeConverter, patterns);
+  populateDMAToLLVMConversionPatterns(module, typeConverter, patterns);
 
   HALDispatchABI abi(&typeConverter);
   // clang-format off

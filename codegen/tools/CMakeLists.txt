@@ -4,6 +4,7 @@ target_link_libraries(quidditch-opt
         MLIROptLib
         Quidditch::Conversion::ConvertSnitchToLLVM
         Quidditch::Conversion::ConvertToRISCV
+        Quidditch::Dialect::DMA::Extensions::DMACoreSpecializationOpInterfaceImpl
         Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
         Quidditch::Dialect::Snitch::Transforms::Passes
         Quidditch::Target::Passes

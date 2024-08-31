@@ -5,7 +5,7 @@
 // CHECK-SAME: %[[PTR:[[:alnum:]]+]]
 // CHECK-SAME: %{{[[:alnum:]]+}}
 // CHECK-SAME: %[[DIM0:[[:alnum:]]+]]
-func.func private @test(%arg0 : memref<?xf32>) -> !quidditch_snitch.dma_token {
+func.func private @test(%arg0 : memref<?xf32>) -> !dma.token {
   // CHECK-DAG: %[[NULL:.*]] = llvm.mlir.zero
   // CHECK-DAG: %[[ZERO:.*]] = llvm.mlir.constant(0 :
   // CHECK: %[[GEP:.*]] = llvm.getelementptr %[[NULL]][%[[DIM0]]]
@@ -16,9 +16,9 @@ func.func private @test(%arg0 : memref<?xf32>) -> !quidditch_snitch.dma_token {
   // CHECK: %[[GEP:.*]] = llvm.getelementptr %[[PTR]][%[[OFFSET]]]
   // CHECK: %[[REM:.*]] = llvm.urem %[[SIZE]], %[[ZERO_MEM_SIZE]]
   // CHECK: %[[TOKEN:.*]] = llvm.call @snrt_dma_start_1d(%[[GEP]], %[[ZERO_MEM]], %[[REM]])
-  %0 = quidditch_snitch.start_zero_mem_transfer %arg0 : memref<?xf32>
+  %0 = dma.start_zero_mem_transfer %arg0 : memref<?xf32>
   // CHECK: return %[[TOKEN]]
-  return %0 : !quidditch_snitch.dma_token
+  return %0 : !dma.token
 }
 
 // CHECK-LABEL: @test1(
@@ -30,7 +30,7 @@ func.func private @test(%arg0 : memref<?xf32>) -> !quidditch_snitch.dma_token {
 // CHECK-SAME: %[[DIM2:[[:alnum:]]+]]
 // CHECK-SAME: %[[STRIDE0:[[:alnum:]]+]]
 // CHECK-SAME: %[[STRIDE1:[[:alnum:]]+]]
-func.func private @test1(%arg0 : memref<?x?x?xf32, strided<[?, ?, 1]>>) -> !quidditch_snitch.dma_token {
+func.func private @test1(%arg0 : memref<?x?x?xf32, strided<[?, ?, 1]>>) -> !dma.token {
   // CHECK-DAG: %[[ZERO_INDEX:.*]] = llvm.mlir.constant(0 : index)
   // CHECK-DAG: %[[ZERO_I32:.*]] = llvm.mlir.constant(0 : i32)
   // CHECK-DAG: %[[ONE:.*]] = llvm.mlir.constant(1 :
@@ -67,7 +67,7 @@ func.func private @test1(%arg0 : memref<?x?x?xf32, strided<[?, ?, 1]>>) -> !quid
   // CHECK: llvm.br ^[[LOOP0]](%[[INC0]], %[[TOKEN1]] :
 
   // CHECK: ^[[EXIT0]]:
-  %0 = quidditch_snitch.start_zero_mem_transfer %arg0 : memref<?x?x?xf32, strided<[?, ?, 1]>>
+  %0 = dma.start_zero_mem_transfer %arg0 : memref<?x?x?xf32, strided<[?, ?, 1]>>
   // CHECK: return %[[TOKEN0]]
-  return %0 : !quidditch_snitch.dma_token
+  return %0 : !dma.token
 }

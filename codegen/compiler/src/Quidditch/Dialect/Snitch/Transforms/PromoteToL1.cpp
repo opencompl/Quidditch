@@ -1,5 +1,7 @@
 #include "Passes.h"
 
+#include "Quidditch/Dialect/DMA/IR/DMADialect.h"
+#include "Quidditch/Dialect/DMA/IR/DMAOps.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchAttrs.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h"
@@ -50,6 +52,7 @@ protected:
 
 using namespace mlir;
 using namespace quidditch::Snitch;
+using namespace quidditch::dma;
 
 void PromoteOperandsToL1::runOnOperation() {
   // Copy all tensors used as operands to compute ops into L1 memory.
@@ -62,8 +65,9 @@ void PromoteOperandsToL1::runOnOperation() {
 
     auto builder = OpBuilder(computeOp);
     for (OpOperand *use : nonL1Uses) {
-      auto copyOp = builder.create<StartTensorCopyOp>(computeOp.getLoc(),
-                                                      /*copy=*/use->get());
+      auto copyOp = builder.create<StartTensorCopyOp>(
+          computeOp.getLoc(),
+          /*copy=*/use->get(), builder.getAttr<L1EncodingAttr>());
       auto waitOp = builder.create<WaitForTensorCopyOp>(
           computeOp.getLoc(), copyOp.getResult(), copyOp.getToken(),
           /*copy=*/use->get());
@@ -81,8 +85,9 @@ void PromoteAllocsToL1::runOnOperation() {
     }
 
     OpBuilder builder(tensorOp);
-    auto copyOp = builder.create<StartTensorCopyOp>(tensorOp.getLoc(),
-                                                    tensorOp.getCopy());
+    auto copyOp =
+        builder.create<StartTensorCopyOp>(tensorOp.getLoc(), tensorOp.getCopy(),
+                                          builder.getAttr<L1EncodingAttr>());
     auto waitOp = builder.create<WaitForTensorCopyOp>(
         tensorOp.getLoc(), copyOp.getResult(), copyOp.getToken(),
         /*copy=*/tensorOp.getCopy());
@@ -112,9 +117,9 @@ void PromotePadsToL1::runOnOperation() {
 
     OpBuilder builder(padOp);
     auto copyOp = builder.create<StartTensorCopyOp>(
-        padOp.getLoc(), padOp.getType(), builder.getType<DMATokenType>(),
-        padOp.getSource(), padOp.getHigh(), padOp.getStaticHighAttr(),
-        undefPadding);
+        padOp.getLoc(), padOp.getType(), builder.getType<TokenType>(),
+        padOp.getSource(), builder.getAttr<L1EncodingAttr>(), padOp.getHigh(),
+        padOp.getStaticHighAttr(), undefPadding);
     auto waitOp = builder.create<WaitForTensorCopyOp>(
         padOp.getLoc(), copyOp.getResult(), copyOp.getToken(),
         /*copy=*/padOp.getSource());

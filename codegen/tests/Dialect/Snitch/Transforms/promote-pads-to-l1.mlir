@@ -4,9 +4,9 @@
 // CHECK-SAME: %[[A:[[:alnum:]]+]]: tensor<32x32xf32>
 func.func @test_zero_f32(%a : tensor<32x32xf32>) -> tensor<33x33xf32> {
   %c = arith.constant 0.0 : f32
-  // CHECK: %[[R:.*]], %[[T:.*]] = quidditch_snitch.start_tensor_copy %[[A]]
-  // CHECK-SAME: pad with zero to [1, 1]
-  // CHECK: %[[R2:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[A]]
+  // CHECK: %[[R:.*]], %[[T:.*]] = dma.start_tensor_copy of %[[A]]
+  // CHECK-SAME: pad with zero by [1, 1]
+  // CHECK: %[[R2:.*]] = dma.wait_for_tensor_copy of %[[A]]
   // CHECK-SAME: to %[[R]]
   // CHECK-SAME: using %[[T]]
   %0 = tensor.pad %a low[0, 0] high[1, 1] {
@@ -21,9 +21,9 @@ func.func @test_zero_f32(%a : tensor<32x32xf32>) -> tensor<33x33xf32> {
 // CHECK-SAME: %[[A:[[:alnum:]]+]]: tensor<32x32xf32>
 func.func @test_poison(%a : tensor<32x32xf32>) -> tensor<33x33xf32> {
   %c = ub.poison : f32
-  // CHECK: %[[R:.*]], %[[T:.*]] = quidditch_snitch.start_tensor_copy %[[A]]
-  // CHECK-SAME: pad with undef to [1, 1]
-  // CHECK: %[[R2:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[A]]
+  // CHECK: %[[R:.*]], %[[T:.*]] = dma.start_tensor_copy of %[[A]]
+  // CHECK-SAME: pad with undef by [1, 1]
+  // CHECK: %[[R2:.*]] = dma.wait_for_tensor_copy of %[[A]]
   // CHECK-SAME: to %[[R]]
   // CHECK-SAME: using %[[T]]
   %0 = tensor.pad %a low[0, 0] high[1, 1] {
