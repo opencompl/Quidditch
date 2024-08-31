@@ -3,6 +3,7 @@
 #include "mlir/Conversion/LLVMCommon/MemRefBuilder.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -382,17 +383,43 @@ struct StartZeroMemTransferOpOpLowering
     SmallVector<OpFoldResult> sizes =
         memref::getMixedSizes(rewriter, op->getLoc(), op.getFilled());
 
+    OpFoldResult contiguousSize = rewriter.getIndexAttr(1);
+    for (OpFoldResult contiguousDim :
+         ArrayRef(sizes).drop_front(*nonContiguousDims)) {
+      contiguousSize = affine::makeComposedFoldedAffineApply(
+          rewriter, op->getLoc(),
+          rewriter.getAffineDimExpr(0) * rewriter.getAffineDimExpr(1),
+          {contiguousSize, contiguousDim});
+    }
+    contiguousSize = affine::makeComposedFoldedAffineApply(
+        rewriter, op->getLoc(),
+        rewriter.getAffineDimExpr(0) *
+            rewriter.getAffineConstantExpr(memRefType.getElementTypeBitWidth() /
+                                           8),
+        {contiguousSize});
+
+    OpFoldResult tileSize = affine::makeComposedFoldedAffineApply(
+        rewriter, op->getLoc(),
+        rewriter.getAffineDimExpr(0).floorDiv(
+            rewriter.getAffineConstantExpr(zeroMemSize)),
+        {contiguousSize});
+
     SmallVector<Value> lowerBounds;
     SmallVector<Value> upperBounds;
     SmallVector<Value> steps;
     Value zeroIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 0);
     Value oneIndex = rewriter.create<arith::ConstantIndexOp>(op.getLoc(), 1);
-    for (size_t index : llvm::seq(*nonContiguousDims)) {
+    for (size_t index : llvm::seq(*nonContiguousDims - 1)) {
       lowerBounds.push_back(zeroIndex);
       steps.push_back(oneIndex);
       upperBounds.push_back(getValueOrCreateConstantIndexOp(
           rewriter, op->getLoc(), sizes[index]));
     }
+    lowerBounds.push_back(zeroIndex);
+    steps.push_back(
+        getValueOrCreateConstantIndexOp(rewriter, op->getLoc(), tileSize));
+    upperBounds.push_back(getValueOrCreateConstantIndexOp(
+        rewriter, op->getLoc(), sizes[*nonContiguousDims - 1]));
 
     // Loop over every non-contiguous dimension to zero every contiguous
     // inner subview.
@@ -402,8 +429,16 @@ struct StartZeroMemTransferOpOpLowering
         [&](OpBuilder &builder, Location loc, ValueRange ivs,
             ValueRange iterArgs) -> scf::ValueVector {
           SmallVector<OpFoldResult> offsets = ivs;
-          SmallVector<OpFoldResult> subSizes(*nonContiguousDims,
+          SmallVector<OpFoldResult> subSizes(*nonContiguousDims - 1,
                                              rewriter.getIndexAttr(1));
+          subSizes.push_back(affine::makeComposedFoldedAffineMin(
+              rewriter, loc,
+              AffineMap::get(
+                  3, 0,
+                  {rewriter.getAffineDimExpr(0),
+                   rewriter.getAffineDimExpr(1) - rewriter.getAffineDimExpr(2)},
+                  getContext()),
+              {tileSize, sizes[*nonContiguousDims - 1], offsets.back()}));
           for (unsigned i :
                llvm::seq<unsigned>(*nonContiguousDims, memRefType.getRank())) {
             offsets.push_back(rewriter.getIndexAttr(0));
@@ -412,10 +447,42 @@ struct StartZeroMemTransferOpOpLowering
           SmallVector<OpFoldResult> strides(memRefType.getRank(),
                                             rewriter.getIndexAttr(1));
 
-          Value subMemRef = rewriter.create<memref::SubViewOp>(
+          TypedValue<MemRefType> subMemRef = rewriter.create<memref::SubViewOp>(
               loc, op.getFilled(), offsets, subSizes, strides);
-          return {
-              builder.create<StartZeroMemTransferOp>(op->getLoc(), subMemRef)};
+
+          auto zeroContMemRefType =
+              MemRefType::get(subMemRef.getType().getShape(),
+                              subMemRef.getType().getElementType());
+
+          Value zeroPointer = rewriter.create<LLVM::IntToPtrOp>(
+              op->getLoc(), rewriter.getType<LLVM::LLVMPointerType>(),
+              rewriter.create<LLVM::ConstantOp>(
+                  op->getLoc(), rewriter.getI32IntegerAttr(zeroMemAddress)));
+
+          SmallVector<Value> llvmConvertedSizes;
+          for (OpFoldResult size : sizes) {
+            llvmConvertedSizes.push_back(
+                typeConverter->materializeTargetConversion(
+                    rewriter, loc, getIndexType(),
+                    getValueOrCreateConstantIndexOp(rewriter, loc, size)));
+          }
+          SmallVector<Value> llvmConvertedStrides;
+          llvmConvertedStrides.push_back(
+              rewriter.create<LLVM::ConstantOp>(loc, getIndexType(), 1));
+          for (Value size :
+               llvm::reverse(ArrayRef(llvmConvertedSizes).drop_front())) {
+            llvmConvertedStrides.push_back(rewriter.create<LLVM::MulOp>(
+                loc, llvmConvertedStrides.back(), size));
+          }
+          std::reverse(llvmConvertedStrides.begin(),
+                       llvmConvertedStrides.end());
+          Value llvmMemRef = createMemRefDescriptor(
+              loc, zeroContMemRefType, zeroPointer, zeroPointer,
+              llvmConvertedSizes, llvmConvertedStrides, rewriter);
+
+          Value memRef = typeConverter->materializeSourceConversion(
+              rewriter, loc, zeroContMemRefType, llvmMemRef);
+          return {builder.create<StartDMATransferOp>(loc, memRef, subMemRef)};
         });
 
     Type tokenType = typeConverter->convertType(op.getType());
