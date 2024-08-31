@@ -32,6 +32,7 @@ iree_cc_library(
         DEPS
         ::PassesIncGen
         Quidditch::Conversion::ConvertSnitchToLLVM
+        Quidditch::Conversion::ConvertDMAToLLVM
         Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
         MLIRFuncDialect
         MLIRIR
@@ -48,6 +49,7 @@ iree_cc_library(
         ::Passes
         Quidditch::Conversion::ConvertToRISCV
         Quidditch::Dialect::Snitch::Transforms::Passes
+        Quidditch::Dialect::DMA::Extensions::DMACoreSpecializationOpInterfaceImpl
         IREELinalgTransformDialect
         LLVMAnalysis
         LLVMBitReader

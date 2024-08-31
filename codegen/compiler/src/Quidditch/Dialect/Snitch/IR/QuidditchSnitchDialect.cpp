@@ -60,13 +60,3 @@ void QuidditchSnitchDialect::initialize() {
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchTypes.cpp.inc"
       >();
 }
-
-Operation *QuidditchSnitchDialect::materializeConstant(OpBuilder &builder,
-                                                       Attribute value,
-                                                       Type type,
-                                                       Location loc) {
-  if (isa<CompletedTokenAttr>(value))
-    return builder.create<CompletedTokenOp>(loc);
-
-  return nullptr;
-}

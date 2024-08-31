@@ -25,6 +25,9 @@
 #include "mlir/Transforms/Passes.h"
 
 #include "Quidditch/Conversion/Passes.h"
+#include "Quidditch/Dialect/DMA/Extensions/DMACoreSpecializationOpInterfaceImpl.h"
+#include "Quidditch/Dialect/DMA/IR/DMADialect.h"
+#include "Quidditch/Dialect/DMA/IR/DMAOps.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h"
 #include "Quidditch/Dialect/Snitch/Transforms/Passes.h"
@@ -129,9 +132,11 @@ public:
   void getDependentDialects(DialectRegistry &registry) const override {
     mlir::registerBuiltinDialectTranslation(registry);
     mlir::registerLLVMDialectTranslation(registry);
+    quidditch::dma::registerDMACoreSpecializationOpInterface(registry);
 
     registry.insert<arm_neon::ArmNeonDialect, arm_sme::ArmSMEDialect,
-                    quidditch::Snitch::QuidditchSnitchDialect>();
+                    quidditch::Snitch::QuidditchSnitchDialect,
+                    quidditch::dma::DMADialect>();
   }
 
   void getDefaultExecutableTargets(
@@ -208,14 +213,13 @@ public:
       return builder.create<memref::AllocaOp>(
           loc, memRefType, dynamicSizes, builder.getI64IntegerAttr(alignment));
     };
-    BufferizationOptions::MemCpyFn memcpyFn = [](OpBuilder &builder,
-                                                 Location loc, Value from,
-                                                 Value to) {
-      Value token =
-          builder.create<quidditch::Snitch::StartDMATransferOp>(loc, from, to);
-      builder.create<quidditch::Snitch::WaitForDMATransfersOp>(loc, token);
-      return success();
-    };
+    BufferizationOptions::MemCpyFn memcpyFn =
+        [](OpBuilder &builder, Location loc, Value from, Value to) {
+          Value token =
+              builder.create<quidditch::dma::StartTransferOp>(loc, from, to);
+          builder.create<quidditch::dma::WaitForTransfersOp>(loc, token);
+          return success();
+        };
 
     FunctionLikeNest(modulePassManager)
         .addPass(createEliminateEmptyTensorsPass)

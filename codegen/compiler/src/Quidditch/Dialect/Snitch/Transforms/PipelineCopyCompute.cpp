@@ -1,5 +1,7 @@
 #include "Passes.h"
 
+#include "Quidditch/Dialect/DMA/IR/DMADialect.h"
+#include "Quidditch/Dialect/DMA/IR/DMAOps.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchAttrs.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h"
@@ -29,6 +31,7 @@ protected:
 using namespace mlir;
 using namespace mlir::iree_compiler;
 using namespace quidditch::Snitch;
+using namespace quidditch::dma;
 
 /// Lifts an 'scf.for' op to a pipeline op with two stages.
 /// The body of the for loop gets placed in the second stage with all iter args

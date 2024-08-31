@@ -18,6 +18,7 @@ def PromotePadsToL1Pass : Pass<"quidditch-promote-pads-to-l1"> {
 
   let dependentDialects = [
     "quidditch::Snitch::QuidditchSnitchDialect",
+    "quidditch::dma::DMADialect",
   ];
 }
 
@@ -28,6 +29,7 @@ def PromoteOperandsToL1Pass : Pass<"quidditch-promote-operands-to-l1"> {
 
   let dependentDialects = [
     "quidditch::Snitch::QuidditchSnitchDialect",
+    "quidditch::dma::DMADialect",
   ];
 }
 
@@ -88,6 +90,7 @@ def LowerForallOpPass : Pass<"quidditch-lower-forall-op"> {
 def PipelineCopyComputePass : Pass<"quidditch-pipeline-copy-compute"> {
   let dependentDialects = [
     "quidditch::Snitch::QuidditchSnitchDialect",
+    "quidditch::dma::DMADialect",
   ];
 }
 

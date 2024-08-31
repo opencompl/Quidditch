@@ -23,6 +23,7 @@ iree_cc_library(
         "SpecializeDMACode.cpp"
         DEPS
         ::PassesIncGen
+        Quidditch::Dialect::DMA::IR::DMADialect
         Quidditch::Dialect::Snitch::IR::QuidditchSnitchDialect
         MLIRIR
         MLIRAffineDialect
