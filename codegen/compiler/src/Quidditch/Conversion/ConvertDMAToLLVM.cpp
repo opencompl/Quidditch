@@ -393,22 +393,13 @@ struct StartZeroMemTransferOpOpLowering
   }
 };
 
-struct WaitForTransfersOpLowering : ConvertOpToLLVMPattern<WaitForTransfersOp> {
+struct WaitForTransferOpLowering : ConvertOpToLLVMPattern<WaitForTransferOp> {
 
-  using ConvertOpToLLVMPattern<WaitForTransfersOp>::ConvertOpToLLVMPattern;
+  using ConvertOpToLLVMPattern<WaitForTransferOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(WaitForTransfersOp op, OpAdaptor adaptor,
+  matchAndRewrite(WaitForTransferOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (adaptor.getTokens().empty()) {
-      rewriter.eraseOp(op);
-      return success();
-    }
-
-    Value current = adaptor.getTokens().front();
-    for (Value iter : llvm::drop_begin(adaptor.getTokens()))
-      current = rewriter.create<LLVM::UMaxOp>(op->getLoc(), current, iter);
-
     Block *prev = op->getBlock();
     Block *body = rewriter.splitBlock(prev, op->getIterator());
     Block *after = rewriter.splitBlock(body, op->getNextNode()->getIterator());
@@ -417,8 +408,9 @@ struct WaitForTransfersOpLowering : ConvertOpToLLVMPattern<WaitForTransfersOp> {
 
     rewriter.setInsertionPointToEnd(body);
     Value lastCompleted = rewriter.create<SnitchDMA::StatOp>(op->getLoc());
-    Value notDone = rewriter.create<LLVM::ICmpOp>(
-        op->getLoc(), LLVM::ICmpPredicate::ult, lastCompleted, current);
+    Value notDone =
+        rewriter.create<LLVM::ICmpOp>(op->getLoc(), LLVM::ICmpPredicate::ult,
+                                      lastCompleted, adaptor.getToken());
     rewriter.create<LLVM::CondBrOp>(op->getLoc(), notDone, body, after);
 
     rewriter.setInsertionPointToStart(after);
@@ -436,6 +428,28 @@ struct CompletedTokenOpLowering : ConvertOpToLLVMPattern<CompletedTokenOp> {
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(
         op, typeConverter->convertType(op.getType()), 0);
+    return success();
+  }
+};
+
+struct CombineTokensOpLowering : ConvertOpToLLVMPattern<CombineTokensOp> {
+
+  using ConvertOpToLLVMPattern<CombineTokensOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(CombineTokensOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (adaptor.getTokens().empty()) {
+      rewriter.replaceOpWithNewOp<CompletedTokenOp>(op);
+      return success();
+    }
+
+    // TODO: Note that this lowering only works for Snitch's single channel DMA!
+    Value current = adaptor.getTokens().front();
+    for (Value iter : llvm::drop_begin(adaptor.getTokens()))
+      current = rewriter.create<LLVM::UMaxOp>(op->getLoc(), current, iter);
+
+    rewriter.replaceOp(op, current);
     return success();
   }
 };
@@ -485,9 +499,9 @@ void quidditch::populateDMAToLLVMConversionPatterns(
           i32, ArrayRef<Type>{ptrType, ptrType, sizeT, sizeT, sizeT, sizeT}));
   dmaStart2D->setAttr("hal.import.bitcode", builder.getUnitAttr());
 
-  patterns.insert<CompletedTokenOpLowering, WaitForTransfersOpLowering,
-                  StartZeroMemTransferOpOpLowering, StatOpLowering>(
-      typeConverter);
+  patterns.insert<CompletedTokenOpLowering, WaitForTransferOpLowering,
+                  StartZeroMemTransferOpOpLowering, StatOpLowering,
+                  CombineTokensOpLowering>(typeConverter);
   patterns.insert<StartTransferOp1DLowering>(dmaStart1D, typeConverter);
   patterns.insert<StartTransferOp2DLowering>(dmaStart2D, typeConverter);
   patterns.insert<StartContiguousZeroMemTransferOpOpLowering>(

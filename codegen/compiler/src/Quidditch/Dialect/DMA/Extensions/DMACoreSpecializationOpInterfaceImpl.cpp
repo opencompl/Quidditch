@@ -46,12 +46,12 @@ struct StartZeroMemTransferOpDMAImpl
           StartZeroMemTransferOpDMAImpl, StartZeroMemTransferOp> {};
 
 //===----------------------------------------------------------------------===//
-// WaitForTransfersOpImpl::DMACoreSpecializationOpInterface
+// WaitForTransferOpImpl::DMACoreSpecializationOpInterface
 //===----------------------------------------------------------------------===//
 
-struct WaitForTransfersOpImpl
-    : CoreSpecializationOpInterface::ExternalModel<WaitForTransfersOpImpl,
-                                                   WaitForTransfersOp> {
+struct WaitForTransferOpImpl
+    : CoreSpecializationOpInterface::ExternalModel<WaitForTransferOpImpl,
+                                                   WaitForTransferOp> {
   void replaceWithNoop(Operation *op, RewriterBase &rewriter) const {
     rewriter.eraseOp(op);
   }
@@ -59,9 +59,9 @@ struct WaitForTransfersOpImpl
   bool needsSynchronization(Operation *op) const { return true; }
 };
 
-struct WaitForTransfersOpDMAImpl
-    : DMACoreSpecializationOpInterface::ExternalModel<WaitForTransfersOpDMAImpl,
-                                                      WaitForTransfersOp> {};
+struct WaitForTransferOpDMAImpl
+    : DMACoreSpecializationOpInterface::ExternalModel<WaitForTransferOpDMAImpl,
+                                                      WaitForTransferOp> {};
 
 } // namespace
 
@@ -71,6 +71,6 @@ void quidditch::dma::registerDMACoreSpecializationOpInterface(
 #define REGISTER_IMPLS(Op) Op::attachInterface<Op##Impl, Op##DMAImpl>(*context)
     REGISTER_IMPLS(StartTransferOp);
     REGISTER_IMPLS(StartZeroMemTransferOp);
-    REGISTER_IMPLS(WaitForTransfersOp);
+    REGISTER_IMPLS(WaitForTransferOp);
   });
 }
