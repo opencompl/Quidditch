@@ -91,7 +91,8 @@ func.func @tensor_copy_pad(%arg0 : tensor<?x?xf32>, %pad0 : index, %pad1 : index
   // CHECK: %[[NEW_DIM0:.*]] = affine.apply #[[$MAP2]]()[%[[DIM0]], %[[PAD0]]]
   // CHECK: %[[NEW_DIM1:.*]] = affine.apply #[[$MAP2]]()[%[[DIM1]], %[[PAD1]]]
   // CHECK: %[[ALLOC:.*]] = memref.alloc(%[[NEW_DIM0]], %[[NEW_DIM1]])
-  // CHECK: start_zero_mem_transfer %[[ALLOC]]
+  // CHECK: %[[ZERO_TOKEN:.*]] = dma.start_zero_mem_transfer %[[ALLOC]]
+  // CHECK: dma.wait_for_transfers %[[ZERO_TOKEN]]
   // CHECK: %[[UNPADDED:.*]] = memref.subview %[[ALLOC]][0, 0] [%[[DIM0]], %[[DIM1]]] [1, 1]
   // CHECK: %[[TOKEN:.*]] = dma.start_transfer from %[[COPY]]
   // CHECK-SAME: to %[[UNPADDED]]
