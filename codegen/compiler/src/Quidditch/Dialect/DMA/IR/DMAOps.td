@@ -179,21 +179,19 @@ def DMA_StartZeroMemTransferOp : DMA_Op<"start_zero_mem_transfer",
   }];
 }
 
-def DMA_WaitForTransfersOp : DMA_Op<"wait_for_transfers"> {
+def DMA_WaitForTransferOp : DMA_Op<"wait_for_transfer"> {
 
   let description = [{
-    Operation awaiting for DMA transfers denoted by its tokens to be finished.
+    Operation awaiting for all DMA transfers denoted by its token to have
+    finished.
   }];
 
-  let arguments = (ins
-    Variadic<DMA_TokenType>:$tokens
-  );
+  let arguments = (ins DMA_TokenType:$token);
 
   let assemblyFormat = [{
-    ($tokens^ `:` type($tokens))? attr-dict
+    $token attr-dict
   }];
 
-  let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
 }
 
@@ -212,6 +210,22 @@ def DMA_CompletedTokenOp
   }];
 
   let hasFolder = 1;
+}
+
+def DMA_CombineTokensOp : DMA_Op<"combine_tokens", [Pure]> {
+
+  let description = [{
+    Op combining multiple DMA tokens into one.
+    Awaiting the token returned by this function is equal in effect as if each
+    token was awaited independently in unspecified order.
+  }];
+
+  let arguments = (ins Variadic<DMA_TokenType>:$tokens);
+  let results = (outs DMA_TokenType:$result);
+
+  let assemblyFormat = [{
+    $tokens attr-dict
+  }];
 }
 
 #endif

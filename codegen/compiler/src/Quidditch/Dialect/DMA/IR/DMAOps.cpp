@@ -296,7 +296,7 @@ StartTensorCopyOp::bufferize(RewriterBase &rewriter,
     //       memory as the transfer below. This is currently unspecified
     //       behaviour (both in the DMA dialect and in Snitch as far as we
     //       know).
-    rewriter.create<WaitForTransfersOp>(getLoc(), token);
+    rewriter.create<WaitForTransferOp>(getLoc(), token);
   }
 
   // Subview into the original memory without any padding.
@@ -379,7 +379,7 @@ WaitForTensorCopyOp::bufferize(RewriterBase &rewriter,
   if (failed(transferTensorBuffer))
     return failure();
 
-  rewriter.create<WaitForTransfersOp>(getLoc(), getToken());
+  rewriter.create<WaitForTransferOp>(getLoc(), getToken());
   replaceOpWithBufferizedValues(rewriter, getOperation(),
                                 *transferTensorBuffer);
   return success();
@@ -414,25 +414,12 @@ OpFoldResult StartTransferOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
-// WaitForTransfersOp
+// WaitForTransferOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult WaitForTransfersOp::fold(FoldAdaptor adaptor,
-                                       SmallVectorImpl<OpFoldResult> &results) {
-  bool changed = false;
-  MutableOperandRange tokens = getTokensMutable();
-  for (int i = tokens.size() - 1; i >= 0; i--) {
-    if (adaptor.getTokens()[i]) {
-      changed = true;
-      tokens.erase(i);
-    }
-  }
-  return success(changed);
-}
-
-LogicalResult WaitForTransfersOp::canonicalize(WaitForTransfersOp op,
-                                               PatternRewriter &rewriter) {
-  if (!op.getTokens().empty())
+LogicalResult WaitForTransferOp::canonicalize(WaitForTransferOp op,
+                                              PatternRewriter &rewriter) {
+  if (!matchPattern(op.getToken(), m_Constant<CompletedTokenAttr>(nullptr)))
     return failure();
 
   rewriter.eraseOp(op);

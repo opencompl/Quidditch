@@ -19,7 +19,7 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
   // CHECK-NEXT: quidditch_snitch.barrier
   dma.start_transfer from %a : memref<32xf32> to %a_l1 : memref<32xf32>
   %t = dma.start_transfer from %b : memref<32xf32> to %b_l1 : memref<32xf32>
-  dma.wait_for_transfers %t : !dma.token
+  dma.wait_for_transfer %t
 
   // CHECK-NEXT: microkernel
   // CHECK: }
@@ -34,7 +34,7 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
   // CHECK-NEXT: dma.completed_token
   %t2 = dma.start_transfer from %b_l1 : memref<32xf32> to %b : memref<32xf32>
   // CHECK-NEXT: quidditch_snitch.barrier
-  dma.wait_for_transfers %t2 : !dma.token
+  dma.wait_for_transfer %t2
 
 
   // CHECK: scf.if
@@ -55,7 +55,7 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
     scf.yield %c, %i : !dma.token, index
   }
   // CHECK: quidditch_snitch.barrier
-  dma.wait_for_transfers %r#0 : !dma.token
+  dma.wait_for_transfer %r#0
   // CHECK-NEXT: return
   return
 }
@@ -69,12 +69,12 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
 
 // CHECK-NEXT: dma.start_transfer
 // CHECK-NEXT: dma.start_transfer
-// CHECK-NEXT: dma.wait_for_transfers
+// CHECK-NEXT: dma.wait_for_transfer
 // CHECK-NEXT: quidditch_snitch.barrier
 
 // CHECK-NEXT: quidditch_snitch.barrier
 // CHECK-NEXT: dma.start_transfer
-// CHECK-NEXT: dma.wait_for_transfers
+// CHECK-NEXT: dma.wait_for_transfer
 // CHECK-NEXT: quidditch_snitch.barrier
 
 // CHECK-NEXT: scf.if
@@ -85,7 +85,7 @@ func.func @test(%a : memref<32xf32>, %b : memref<32xf32>, %cond : i1) {
 // CHECK-NEXT: completed_token
 // CHECK-NEXT: arith.constant
 // CHECK-NEXT: yield
-// CHECK: dma.wait_for_transfers
+// CHECK: dma.wait_for_transfer
 // CHECK-NEXT: quidditch_snitch.barrier
 
 // CHECK-NEXT: return

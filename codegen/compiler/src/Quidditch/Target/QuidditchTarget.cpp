@@ -219,7 +219,7 @@ public:
         [](OpBuilder &builder, Location loc, Value from, Value to) {
           Value token =
               builder.create<quidditch::dma::StartTransferOp>(loc, from, to);
-          builder.create<quidditch::dma::WaitForTransfersOp>(loc, token);
+          builder.create<quidditch::dma::WaitForTransferOp>(loc, token);
           return success();
         };
 

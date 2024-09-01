@@ -4,7 +4,7 @@
 func.func @wait_gets_removed() {
   // CHECK-NEXT: return
   %0 = dma.completed_token
-  dma.wait_for_transfers %0 : !dma.token
+  dma.wait_for_transfer %0
   return
 }
 

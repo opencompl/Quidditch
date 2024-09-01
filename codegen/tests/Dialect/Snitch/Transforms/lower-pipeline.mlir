@@ -53,12 +53,12 @@ func.func @test(
   ^bb0(%arg1: index, %arg2: memref<40x100xf64, #quidditch_snitch.l1_encoding>, %arg3: !dma.token):
     // CHECK: %[[STAGE1_IV:.*]] = affine.apply #[[$MAP3]](%[[IV]])
     // CHECK: memref.subview %{{.*}}[0, %[[STAGE1_IV]]]
-    // CHECK: wait_for_transfers %[[YIELDED1]]
+    // CHECK: wait_for_transfer %[[YIELDED1]]
     // CHECK: linalg.matmul_transpose_b ins(%{{.*}}, %[[YIELDED0]] : {{.*}})
     // CHECK: yield %[[NEXT_YIELDED]], %{{.*}} :
 
     %subview_3 = memref.subview %alloca[0, %arg1] [1, 40] [1, 1] : memref<1x1200xf64, #quidditch_snitch.l1_encoding> to memref<1x40xf64, strided<[1200, 1], offset: ?>, #quidditch_snitch.l1_encoding>
-    dma.wait_for_transfers %arg3 : !dma.token
+    dma.wait_for_transfer %arg3
     linalg.matmul_transpose_b
       ins(%alloca2, %arg2 : memref<1x100xf64, #quidditch_snitch.l1_encoding>, memref<40x100xf64, #quidditch_snitch.l1_encoding>)
       outs(%out : memref<1x40xf64, #quidditch_snitch.l1_encoding>)
@@ -66,7 +66,7 @@ func.func @test(
   // CHECK: %[[IV:.*]] = affine.apply #[[$MAP4]]()
   // CHECK: %[[STAGE1_IV:.*]] = affine.apply #[[$MAP5]]()
   // CHECK: memref.subview %{{.*}}[0, %[[STAGE1_IV]]]
-  // CHECK: wait_for_transfers %[[LAST]]#1
+  // CHECK: wait_for_transfer %[[LAST]]#1
   // CHECK: linalg.matmul_transpose_b ins(%{{.*}}, %[[LAST]]#0 : {{.*}})
   return
 }
