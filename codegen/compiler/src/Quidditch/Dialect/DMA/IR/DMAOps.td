@@ -133,7 +133,12 @@ def DMA_StartTransferOp : DMA_Op<"start_transfer",
 
     The DMA operation is likely (but not guaranteed) to run asynchronous and
     its completion only guaranteed by executing the `wait_for_transfers`
-    operation with the token returned by this operation or a later one.
+    operation with the token returned by this operation.
+
+    Due to the unspecified order and concurrency of transfers, the resulting
+    state of a MemRef is unspecified if at any point two transfers not-yet
+    completed transfers exist that either write to the same memory location
+    or writes to a memory location read by another transfer.
   }];
 
   let arguments = (ins
@@ -154,7 +159,13 @@ def DMA_StartZeroMemTransferOp : DMA_Op<"start_zero_mem_transfer",
   [MemoryEffects<[MemWrite]>]> {
 
   let description = [{
+    Starts a DMA transfer which when completed has filled the given MemRef
+    entirely with bit of 0.
+    I.e. this is equal to C's `memset` with zero, but asynchronous.
 
+    The semantics are identical to a `start_transfer` operation where the
+    source is a MemRef identical in shape to `filled` consisting of just
+    0 bits.
   }];
 
   let arguments = (ins
