@@ -9,8 +9,10 @@
 #include "mlir/Transforms/DialectConversion.h"
 
 #include "Quidditch/Dialect/DMA/IR/DMAOps.h"
+#include "Quidditch/Dialect/SnitchDMA/IR/SnitchDMAOps.h"
 
 using namespace mlir;
+using namespace quidditch;
 using namespace quidditch::dma;
 
 /// Returns the number of potentially non-contiguous outer dimensions of
@@ -414,19 +416,7 @@ struct WaitForTransfersOpLowering : ConvertOpToLLVMPattern<WaitForTransfersOp> {
     rewriter.create<LLVM::BrOp>(op->getLoc(), body);
 
     rewriter.setInsertionPointToEnd(body);
-    Value lastCompleted =
-        rewriter
-            .create<LLVM::InlineAsmOp>(
-                op->getLoc(), /*res=*/rewriter.getI32Type(),
-                /*operands=*/ValueRange(),
-                // dmstati $0, 0
-                // opcode6=0x2b, func3=0, func7=0b100, rd=$0, rs1=zero,
-                // rs2=imm5(0)
-                ".insn r 0x2b, 0, 0b100, $0, zero, zero\n",
-                /*constraints=*/"=r",
-                /*has_side_effects=*/true, /*is_align_stack=*/false,
-                /*asm_dialect=*/nullptr, /*operand_attrs=*/nullptr)
-            .getRes();
+    Value lastCompleted = rewriter.create<SnitchDMA::StatOp>(op->getLoc());
     Value notDone = rewriter.create<LLVM::ICmpOp>(
         op->getLoc(), LLVM::ICmpPredicate::ult, lastCompleted, current);
     rewriter.create<LLVM::CondBrOp>(op->getLoc(), notDone, body, after);
@@ -446,6 +436,26 @@ struct CompletedTokenOpLowering : ConvertOpToLLVMPattern<CompletedTokenOp> {
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(
         op, typeConverter->convertType(op.getType()), 0);
+    return success();
+  }
+};
+
+struct StatOpLowering : ConvertOpToLLVMPattern<SnitchDMA::StatOp> {
+  using ConvertOpToLLVMPattern<SnitchDMA::StatOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(SnitchDMA::StatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<LLVM::InlineAsmOp>(
+        op, /*res=*/rewriter.getI32Type(),
+        /*operands=*/ValueRange(),
+        // dmstati $0, 0
+        // opcode6=0x2b, func3=0, func7=0b100, rd=$0, rs1=zero,
+        // rs2=imm5(0)
+        ".insn r 0x2b, 0, 0b100, $0, zero, zero\n",
+        /*constraints=*/"=r",
+        /*has_side_effects=*/true, /*is_align_stack=*/false,
+        /*asm_dialect=*/nullptr, /*operand_attrs=*/nullptr);
     return success();
   }
 };
@@ -476,7 +486,8 @@ void quidditch::populateDMAToLLVMConversionPatterns(
   dmaStart2D->setAttr("hal.import.bitcode", builder.getUnitAttr());
 
   patterns.insert<CompletedTokenOpLowering, WaitForTransfersOpLowering,
-                  StartZeroMemTransferOpOpLowering>(typeConverter);
+                  StartZeroMemTransferOpOpLowering, StatOpLowering>(
+      typeConverter);
   patterns.insert<StartTransferOp1DLowering>(dmaStart1D, typeConverter);
   patterns.insert<StartTransferOp2DLowering>(dmaStart2D, typeConverter);
   patterns.insert<StartContiguousZeroMemTransferOpOpLowering>(

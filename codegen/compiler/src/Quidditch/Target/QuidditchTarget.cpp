@@ -31,6 +31,7 @@
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h"
 #include "Quidditch/Dialect/Snitch/Transforms/Passes.h"
+#include "Quidditch/Dialect/SnitchDMA/IR/SnitchDMADialect.h"
 
 #include "compiler/plugins/target/LLVMCPU/LinkerTool.h"
 #include "compiler/plugins/target/LLVMCPU/StaticLibraryGenerator.h"
@@ -136,7 +137,8 @@ public:
 
     registry.insert<arm_neon::ArmNeonDialect, arm_sme::ArmSMEDialect,
                     quidditch::Snitch::QuidditchSnitchDialect,
-                    quidditch::dma::DMADialect>();
+                    quidditch::dma::DMADialect,
+                    quidditch::SnitchDMA::SnitchDMADialect>();
   }
 
   void getDefaultExecutableTargets(

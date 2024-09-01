@@ -46,6 +46,7 @@ iree_cc_library(
         "ConvertDMAToLLVM.cpp"
         DEPS
         Quidditch::Dialect::DMA::IR::DMADialect
+        Quidditch::Dialect::SnitchDMA::IR::SnitchDMADialect
         MLIRAnalysis
         MLIRIR
         MLIRLLVMCommonConversion

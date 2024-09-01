@@ -56,6 +56,7 @@ def ConvertToLLVMPass : Pass<"quidditch-convert-to-llvm", "mlir::ModuleOp"> {
     "mlir::scf::SCFDialect",
     "mlir::memref::MemRefDialect",
     "mlir::affine::AffineDialect",
+    "quidditch::SnitchDMA::SnitchDMADialect",
   ];
 }
 

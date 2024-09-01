@@ -4,6 +4,7 @@
 #include "Quidditch/Conversion/Passes.h"
 #include "Quidditch/Dialect/DMA/Extensions/DMACoreSpecializationOpInterfaceImpl.h"
 #include "Quidditch/Dialect/DMA/IR/DMADialect.h"
+#include "Quidditch/Dialect/SnitchDMA/IR/SnitchDMADialect.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "Quidditch/Dialect/Snitch/Transforms/Passes.h"
 #include "Quidditch/Target/Passes.h"
@@ -31,7 +32,8 @@ int main(int argc, char **argv) {
   quidditch::dma::registerDMACoreSpecializationOpInterface(registry);
   iree_compiler::registerAllDialects(registry);
   registry.insert<quidditch::Snitch::QuidditchSnitchDialect,
-                  quidditch::dma::DMADialect>();
+                  quidditch::dma::DMADialect,
+                  quidditch::SnitchDMA::SnitchDMADialect>();
 
   quidditch::registerPasses();
   quidditch::registerConversionPasses();
