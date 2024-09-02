@@ -49,6 +49,7 @@ iree_cc_library(
         ::Passes
         Quidditch::Conversion::ConvertToRISCV
         Quidditch::Dialect::Snitch::Transforms::Passes
+        Quidditch::Dialect::SnitchDMA::Transforms::Passes
         Quidditch::Dialect::DMA::Extensions::DMACoreSpecializationOpInterfaceImpl
         IREELinalgTransformDialect
         LLVMAnalysis
