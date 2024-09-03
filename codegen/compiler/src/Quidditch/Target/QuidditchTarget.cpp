@@ -32,6 +32,7 @@
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h"
 #include "Quidditch/Dialect/Snitch/Transforms/Passes.h"
 #include "Quidditch/Dialect/SnitchDMA/IR/SnitchDMADialect.h"
+#include "Quidditch/Dialect/SnitchDMA/Transforms/Passes.h"
 
 #include "compiler/plugins/target/LLVMCPU/LinkerTool.h"
 #include "compiler/plugins/target/LLVMCPU/StaticLibraryGenerator.h"
@@ -257,6 +258,7 @@ public:
 
     modulePassManager.addPass(quidditch::Snitch::createSpecializeDMACodePass());
     FunctionLikeNest(modulePassManager)
+        .addPass(quidditch::SnitchDMA::createLegalizeDMAOperationsPass)
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass);
     modulePassManager.addPass(quidditch::createConvertToRISCVPass(
