@@ -13,7 +13,7 @@ Building Quidditch requires the following tools to be installed:
 * Ninja (ideally)
 * Docker to install the Quidditch toolchain. See [the toolchain directory for more details](runtime/toolchain/README.md)
 
-The repository is self-contained, and contains the definition of the docker container, and contains no magic.
+The repository is self-contained, contains the definition of the docker container, and contains no magic.
 The compilation is driven by CMake, and uses Docker.
 Python 3.11 is used for the runtime and the tracing script, as well as PyTorch etc., it's not strictly required for compilation except for the lit tests.
 Python 3.12 is not yet supported by PyTorch.
@@ -22,10 +22,9 @@ The first time to compile can take up to one hour, to build MLIR, IREE, and the 
 The docker is mostly used as a convenient way to install the Snitch toolchain, runtime, verilator, etc.
 It's not used for the compiler, rather to make the Snitch tools available.
 The dockerfile can be found in `runtime/toolchain/Dockerfile`.
-The docker toolchain needs to be in sync with the snitch runtime, as the hardware gets continuously updated.
 When updating the snitch runtime submodule, the docker image needs to be updated with the new commit hash to make sure the hardware and software are in sync.
 
-The easiest way to iterate on the docker image is to develop on it locally, and then pushing it to GitHub, which will detect that the toolchain directory is changed, and will release a new image automatically.
+The easiest way to iterate on the docker image is to develop on it locally, and then pushing the changes to GitHub, which will detect that the toolchain directory is changed, and will release a new image automatically.
 
 There are two CMake projects in Quidditch, one is the IREE-based compiler (`codegen/`) which compiles to an executable to run your local machine, and the second is the runtime (`runtime/`), which uses the toolchain from the docker image, and compiles code for Snitch.
 
@@ -71,12 +70,12 @@ independently.
 ## Compiling Neural Networks
 
 Any information you can find on how to use `iree-compile` is applicable, with the only major difference bing the `--iree-hal-target-backends=llvm-cpu`, which also supports our `quidditch` value for the flag, which leverages our flow.
-The inputs to `iree-compile` are all `.mlir` files, so you need to somehow get the file, [here's](https://iree.dev/guides/deployment-configurations/cpu/#compile-and-run-a-program) the guide on how to get one.
+The inputs to `iree-compile` are all `.mlir` files, so you need to somehow get the file, [here's](https://iree.dev/guides/ml-frameworks/) the guide on how to get one.
 The PyTorch and ONNX imports are the flakiest of the imports in our experience, although they can be made to work.
 
 The PyTorch flow uses [iree-turbine](https://github.com/iree-org/iree-turbine), which is included in the virtualenv of the Docker container.
 We use it to compile nsnet2 (`runtime/samples/nsnet2/NsNet2.py`).
-The MLIR file extracted this way is that it will contain functions that are named the same as the Python model functions.
+The MLIR file extracted this way will contain functions that are named the same as the Python model functions.
 If the model doesn't contain the weights, we recommend seeding the tensors with random data in the Python file for reproducible behavior.
 
 ### Adding a new Neural Network
@@ -103,7 +102,7 @@ The simplest example is `runtime/samples/vec_multiply/`.
 
 The `quiddtch_module` macro in the `CMakeLists.txt` turns the MLIR file into an executable.
 `ASSERT_XDSL` is a flag that will error out if xDSL micro-kernel compilation fails.
-This macro creates an executable called `mynewmodel` (removing the `.mlir` suffix).
+This macro creates a library called `mynewmodel` (removing the `.mlir` suffix).
 It will also create two new header files, `mynewmodel.h`, and `mynewmodel_module.h` (the device and host code).
 These need to be imported in the `main.c` file for your model.
 The `add_executable` macro is used to specify the name of the executable that `main.c` will be compiled to, let's say `mynewmodelexecutable`.
@@ -115,12 +114,12 @@ In summary:
 
  0. Get your MLIR file from your model
  1. Copy the folder of one of the existing models, and adjust the files to your module
- 2. Refer to the `uitls/run_model.h` file for documentation, and other models for examples
+ 2. Refer to the `utils/run_model.h` file for documentation, and other models for examples
  3. Go to the build directory, and run `ninja`, which recompiles everything, including your new changes
  4. The cmake build system mirrors your source directory, so if you added `runtime/samples/mynewmodel/`, the build location will be `build/runtime/samples/mynewmodel`.
  5. Add your new executable to `tests/CMakeLists.txt`
 
-> NB. you can override the compilation with xDSL by adding `LLVM` to the `uidditch_module` macro, which overrides the XDSL pipeline entirely and just computes everything with stock IREE `llvm-cpu` target.
+> NB. you can override the compilation with xDSL by adding `LLVM` to the `quidditch_module` macro, which overrides the XDSL pipeline entirely and just computes everything with stock IREE `llvm-cpu` target.
 
 ### Calling the Neural Network
 
@@ -142,7 +141,7 @@ The biggest and most important file is `QuidditchTarget.cpp`, with the informati
 
 `QuidditchTarget.cpp`
 
-The QuidditchTargetBackend class sibclasses IREE::HAL::TargetBackend.
+The QuidditchTargetBackend class subclasses IREE::HAL::TargetBackend.
 
 `buildConfigurationPassPipeline`, `buildTranslationPassPipeline` and `buildLinkingPassPipeline` build the pass pipeline:
 
@@ -164,9 +163,9 @@ N.B. The heuristic to pick the tile sizes for individual cores, which happens af
 
 ### Dialect
 
-There is currently only one dialect, `snitch`, which might be split up in the future.
+There is currently only one dialect, `quidditch_snitch`, which might be split up in the future.
 
-The parameters fort the loweing config are in `QuirritchSnitchAttrs.td`, in `QuidditchSnitch_LoweringConfigAttr`.
+The parameters fort the loweing config are in `QuidditchSnitchAttrs.td`, in `QuidditchSnitch_LoweringConfigAttr`.
 
 ### Conversion
 
