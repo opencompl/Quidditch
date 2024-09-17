@@ -165,7 +165,7 @@ N.B. The heuristic to pick the tile sizes for individual cores, which happens af
 
 There is currently only one dialect, `quidditch_snitch`, which might be split up in the future.
 
-The parameters fort the loweing config are in `QuidditchSnitchAttrs.td`, in `QuidditchSnitch_LoweringConfigAttr`.
+The parameters for the lowering config are in `QuidditchSnitchAttrs.td`, in `QuidditchSnitch_LoweringConfigAttr`.
 
 ### Conversion
 
