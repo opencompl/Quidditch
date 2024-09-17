@@ -57,51 +57,44 @@ static LogicalResult setRootConfig(FunctionOpInterface funcOp,
         //   only applicable once on Occamy.
         SmallVector<int64_t> workgroupTiles(3, 0);
         SmallVector<int64_t> l1Tiles(3, 0);
-        bool dualBuffer = false;
+        SmallVector<int64_t> l1Interchange = {2, 0, 1};
+        bool dualBuffer = true;
 
         if (funcOp.getName() ==
             "main$async_dispatch_9_matmul_transpose_b_1x161x600_f64") {
-          workgroupTiles[2] = 100;
-
           l1Tiles[0] = 0;
           l1Tiles[1] = 56;
-          dualBuffer = true;
+          l1Tiles[2] = 100;
         }
         if (funcOp.getName() ==
             "main$async_dispatch_0_matmul_transpose_b_1x400x161_f64") {
           l1Tiles[1] = 40;
+          // TODO: Switch to 82 and true once correctness bugs are fixed.
           l1Tiles[2] = 0;
+          dualBuffer = false;
         }
         if (funcOp.getName() ==
             "main$async_dispatch_7_matmul_transpose_b_1x600x400_f64") {
-          workgroupTiles[2] = 100;
-
           l1Tiles[0] = 0;
           l1Tiles[1] = 40;
-          l1Tiles[2] = 0;
-          dualBuffer = true;
+          l1Tiles[2] = 100;
         }
         if (funcOp.getName() ==
             "main$async_dispatch_8_matmul_transpose_b_1x600x600_f64") {
-          workgroupTiles[2] = 100;
-
           l1Tiles[0] = 0;
           l1Tiles[1] = 40;
-          dualBuffer = true;
+          l1Tiles[2] = 100;
         }
         if (funcOp.getName() ==
             "main$async_dispatch_1_matmul_transpose_b_1x1200x400_f64") {
-          workgroupTiles[2] = 100;
-
           l1Tiles[0] = 0;
           l1Tiles[1] = 40;
-          l1Tiles[2] = 0;
-          dualBuffer = true;
+          l1Tiles[2] = 100;
         }
 
         setLoweringConfig(rootOp, quidditch::Snitch::LoweringConfigAttr::get(
                                       rootOp->getContext(), workgroupTiles,
-                                      l1Tiles, dualBuffer));
+                                      l1Tiles, l1Interchange, dualBuffer));
         return success();
       })
       .Default(success());
@@ -126,8 +119,11 @@ void ConfigureForSnitch::runOnOperation() {
   if (failed(setTranslationInfo(funcOp)))
     return signalPassFailure();
 
-  if (failed(setRootConfig(funcOp, rootOperation)))
-    return signalPassFailure();
+  auto loweringConfig =
+      getLoweringConfig<quidditch::Snitch::LoweringConfigAttr>(rootOperation);
+  if (!loweringConfig)
+    if (failed(setRootConfig(funcOp, rootOperation)))
+      return signalPassFailure();
 
   // The root configuration setting introduces `tensor.dim` operations.
   // Resolve those away.

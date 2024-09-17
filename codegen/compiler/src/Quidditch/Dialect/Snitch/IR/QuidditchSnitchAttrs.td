@@ -8,16 +8,6 @@ include "mlir/IR/AttrTypeBase.td"
 class QuidditchSnitch_Attr<string name, list<Trait> traits = []> :
   AttrDef<QuidditchSnitch_Dialect, name, traits>;
 
-def QuidditchSnitch_CompletedTokenAttr : QuidditchSnitch_Attr<"CompletedToken"> {
-
-  let mnemonic = "completed_token";
-
-  let description = [{
-    Attribute representing an instance of a `!quidditch_snitch.dma_token`
-    signaling a complete transfer.
-  }];
-}
-
 def QuidditchSnitch_L1EncodingAttr : QuidditchSnitch_Attr<"L1Encoding"> {
   let mnemonic = "l1_encoding";
 
@@ -48,6 +38,7 @@ def TileSizeList : OptionalArrayRefParameter<"int64_t"> {
     $_printer << "[" << $_self << "]"
   }];
 }
+defvar TileInterchangeList = TileSizeList;
 
 def QuidditchSnitch_LoweringConfigAttr : QuidditchSnitch_Attr<"LoweringConfig",
   [DeclareAttrInterfaceMethods<IREECodegen_LoweringConfigAttrInterface, [
@@ -63,6 +54,7 @@ def QuidditchSnitch_LoweringConfigAttr : QuidditchSnitch_Attr<"LoweringConfig",
   let parameters = (ins
     TileSizeList:$workgroup_tiles,
     TileSizeList:$l1_tiles,
+    TileInterchangeList:$l1_tiles_interchange,
     DefaultValuedParameter<"bool", "false">:$dual_buffer
   );
 
@@ -70,6 +62,7 @@ def QuidditchSnitch_LoweringConfigAttr : QuidditchSnitch_Attr<"LoweringConfig",
     AttrBuilder<(ins
       CArg<"llvm::ArrayRef<int64_t>", "{}">:$workgroupTiles,
       CArg<"llvm::ArrayRef<int64_t>", "{}">:$l1Tiles,
+      CArg<"llvm::ArrayRef<int64_t>", "{}">:$l1TilesInterchange,
       CArg<"bool", "false">:$dualBuffer
     )>
   ];

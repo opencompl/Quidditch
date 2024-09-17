@@ -6,16 +6,16 @@
 func.func @test(%a : tensor<32x32xf32>, %b : tensor<32x32xf32>) -> tensor<32x32xf32> {
   // CHECK: %[[E:.*]] = bufferization.alloc_tensor
   %e = bufferization.alloc_tensor() : tensor<32x32xf32>
-  // CHECK: %[[A1:.*]], %[[TOKEN:.*]] = quidditch_snitch.start_tensor_copy %[[A]] to L1
-  // CHECK: %[[A2:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[A]]
+  // CHECK: %[[A1:.*]], %[[TOKEN:.*]] = dma.start_tensor_copy of %[[A]] to #quidditch_snitch.l1_encoding
+  // CHECK: %[[A2:.*]] = dma.wait_for_tensor_copy of %[[A]]
   // CHECK-SAME: to %[[A1]]
   // CEHCK-SAME: using %[[TOKEN]]
-  // CHECK: %[[B1:.*]], %[[TOKEN:.*]] = quidditch_snitch.start_tensor_copy %[[B]] to L1
-  // CHECK: %[[B2:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[B]]
+  // CHECK: %[[B1:.*]], %[[TOKEN:.*]] = dma.start_tensor_copy of %[[B]] to #quidditch_snitch.l1_encoding
+  // CHECK: %[[B2:.*]] = dma.wait_for_tensor_copy of %[[B]]
   // CHECK-SAME: to %[[B1]]
   // CHECK-SAME: using %[[TOKEN]]
-  // CHECK: %[[E1:.*]], %[[TOKEN:.*]] = quidditch_snitch.start_tensor_copy %[[E]] to L1
-  // CHECK: %[[E2:.*]] = quidditch_snitch.wait_for_tensor_copy of %[[E]]
+  // CHECK: %[[E1:.*]], %[[TOKEN:.*]] = dma.start_tensor_copy of %[[E]] to #quidditch_snitch.l1_encoding
+  // CHECK: %[[E2:.*]] = dma.wait_for_tensor_copy of %[[E]]
   // CHECK-SAME: to %[[E1]]
   // CHECK-SAME: using %[[TOKEN]]
   // CHECK: linalg.matmul ins(%[[A2]], %[[B2]] : {{.*}}) outs(%[[E2]] : {{.*}})

@@ -25,9 +25,14 @@
 #include "mlir/Transforms/Passes.h"
 
 #include "Quidditch/Conversion/Passes.h"
+#include "Quidditch/Dialect/DMA/Extensions/DMACoreSpecializationOpInterfaceImpl.h"
+#include "Quidditch/Dialect/DMA/IR/DMADialect.h"
+#include "Quidditch/Dialect/DMA/IR/DMAOps.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchDialect.h"
 #include "Quidditch/Dialect/Snitch/IR/QuidditchSnitchOps.h"
 #include "Quidditch/Dialect/Snitch/Transforms/Passes.h"
+#include "Quidditch/Dialect/SnitchDMA/IR/SnitchDMADialect.h"
+#include "Quidditch/Dialect/SnitchDMA/Transforms/Passes.h"
 
 #include "compiler/plugins/target/LLVMCPU/LinkerTool.h"
 #include "compiler/plugins/target/LLVMCPU/StaticLibraryGenerator.h"
@@ -129,9 +134,12 @@ public:
   void getDependentDialects(DialectRegistry &registry) const override {
     mlir::registerBuiltinDialectTranslation(registry);
     mlir::registerLLVMDialectTranslation(registry);
+    quidditch::dma::registerDMACoreSpecializationOpInterface(registry);
 
     registry.insert<arm_neon::ArmNeonDialect, arm_sme::ArmSMEDialect,
-                    quidditch::Snitch::QuidditchSnitchDialect>();
+                    quidditch::Snitch::QuidditchSnitchDialect,
+                    quidditch::dma::DMADialect,
+                    quidditch::SnitchDMA::SnitchDMADialect>();
   }
 
   void getDefaultExecutableTargets(
@@ -183,12 +191,6 @@ public:
         .addPass(createFuseTensorPadWithConsumerPass)
         .addPass(createConcretizePadResultShapePass)
         .addPass([] {
-          return quidditch::createTensorTilePass(
-              {quidditch::TilingLevel::Reduction});
-        })
-        .addPass(createCanonicalizerPass)
-        .addPass(createCSEPass)
-        .addPass([] {
           return quidditch::createTensorTilePass({quidditch::TilingLevel::L1});
         })
         .addPass(createFuseTensorPadWithConsumerPass)
@@ -197,6 +199,7 @@ public:
         .addPass(quidditch::Snitch::createPromoteOperandsToL1Pass)
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
+        .addPass(createLoopInvariantCodeMotionPass)
         .addPass(quidditch::Snitch::createPipelineCopyComputePass)
         // TODO: Fuse scf.forall after.
         .addPass([] {
@@ -205,7 +208,6 @@ public:
         })
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass)
-        .addPass(createLoopInvariantCodeMotionPass)
         .addPass(quidditch::Snitch::createFormMicrokernelsPass);
 
     BufferizationOptions::AllocationFn allocationFn =
@@ -214,14 +216,13 @@ public:
       return builder.create<memref::AllocaOp>(
           loc, memRefType, dynamicSizes, builder.getI64IntegerAttr(alignment));
     };
-    BufferizationOptions::MemCpyFn memcpyFn = [](OpBuilder &builder,
-                                                 Location loc, Value from,
-                                                 Value to) {
-      Value token =
-          builder.create<quidditch::Snitch::StartDMATransferOp>(loc, from, to);
-      builder.create<quidditch::Snitch::WaitForDMATransfersOp>(loc, token);
-      return success();
-    };
+    BufferizationOptions::MemCpyFn memcpyFn =
+        [](OpBuilder &builder, Location loc, Value from, Value to) {
+          Value token =
+              builder.create<quidditch::dma::StartTransferOp>(loc, from, to);
+          builder.create<quidditch::dma::WaitForTransferOp>(loc, token);
+          return success();
+        };
 
     FunctionLikeNest(modulePassManager)
         .addPass(createEliminateEmptyTensorsPass)
@@ -257,6 +258,7 @@ public:
 
     modulePassManager.addPass(quidditch::Snitch::createSpecializeDMACodePass());
     FunctionLikeNest(modulePassManager)
+        .addPass(quidditch::SnitchDMA::createLegalizeDMAOperationsPass)
         .addPass(createCanonicalizerPass)
         .addPass(createCSEPass);
     modulePassManager.addPass(quidditch::createConvertToRISCVPass(
@@ -580,7 +582,14 @@ private:
 class QuidditchSession final
     : public PluginSession<QuidditchSession, QuidditchTargetOptions,
                            PluginActivationPolicy::DefaultActivated> {
+public:
+  static void registerGlobalDialects(DialectRegistry &registry) {
+    // Required to allow the 'quidditch_snitch' dialect to also be used in
+    // input IR without just being parsed as an 'OpaqueAttr'.
+    registry.insert<quidditch::Snitch::QuidditchSnitchDialect>();
+  }
 
+private:
   void populateHALTargetDevices(IREE::HAL::TargetDeviceList &targets) override {
     targets.add("quidditch_device",
                 []() { return std::make_shared<QuidditchTargetDevice>(); });

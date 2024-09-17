@@ -38,3 +38,19 @@ iree_cc_library(
         MLIRSCFDialect
         MLIRTransforms
 )
+
+iree_cc_library(
+        NAME
+        ConvertDMAToLLVM
+        SRCS
+        "ConvertDMAToLLVM.cpp"
+        DEPS
+        Quidditch::Dialect::DMA::IR::DMADialect
+        Quidditch::Dialect::SnitchDMA::IR::SnitchDMADialect
+        MLIRAnalysis
+        MLIRIR
+        MLIRLLVMCommonConversion
+        MLIRLLVMDialect
+        MLIRSCFDialect
+        MLIRTransforms
+)
