@@ -1,0 +1,5 @@
+.venv
+venv
+toolchain
+.ccls*
+*/compile_commands.json
