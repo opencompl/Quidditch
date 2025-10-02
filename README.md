@@ -128,7 +128,7 @@ The second way to do it will generate traces.
 
 ## Quidditch Compiler Structure
 
-All source code is in `codegen/compiler/src/Quirritch`.
+All source code is in `codegen/compiler/src/Quidditch`.
 Within it there are three top level directories:
 
 1. Conversion - containing dialect conversions, in our case Snitch to LLVM and the xDSL linalg to RISC-V lowering
