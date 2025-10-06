@@ -44,6 +44,9 @@ jobs:
         with:
           python-version: 3.11
 
+      - name: Create virtual environment
+        run: uv venv venv -p 3.11
+
       - name: Install minimum required cmake and ninja
         uses: lukka/get-cmake@latest
         with:
