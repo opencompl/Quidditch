@@ -17,7 +17,7 @@ endif ()
 set(Python3_FIND_VIRTUALENV "FIRST")
 find_package(Python3 REQUIRED)
 execute_process(
-    COMMAND uv pip install -r ${CMAKE_CURRENT_LIST_DIR}/requirements.txt
+    COMMAND uv pip install -r ${CMAKE_CURRENT_LIST_DIR}/requirements.txt --exclude-newer 2024-09-01
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     COMMAND_ERROR_IS_FATAL ANY
 )
