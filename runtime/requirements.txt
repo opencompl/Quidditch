@@ -6,3 +6,5 @@ tabulate==0.9.*
 PyYAML==6.0.*
 pandas==2.2.2
 progressbar2==4.4.2
+setuptools
+
