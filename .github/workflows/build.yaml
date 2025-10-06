@@ -72,6 +72,7 @@ jobs:
 
       - name: Configure Megabuild
         run: |
+          source venv/bin/activate
           cmake -G Ninja -B ${{github.workspace}}/build \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER=clang \
@@ -84,7 +85,9 @@ jobs:
 
       - name: Build and Test precommit
         if: ${{ github.event_name == 'pull_request' }}
-        run: cmake --build ${{github.workspace}}/build --target test
+        run: |
+          source venv/bin/activate
+          cmake --build ${{github.workspace}}/build --target test
 
       - uses: jlumbroso/free-disk-space@v1.3.1
         if: ${{ github.event_name != 'pull_request' }}
@@ -98,6 +101,7 @@ jobs:
       - name: Build and Test nightly
         if: ${{ github.event_name != 'pull_request' }}
         run: |
+          source venv/bin/activate
           cmake --build ${{github.workspace}}/build --target runtime
           # Clean disk space ahead of runs.
           rm -rf ${{github.workspace}}/build/*.o ${{github.workspace}}/build/*.a
