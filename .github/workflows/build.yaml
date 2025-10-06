@@ -29,16 +29,20 @@ jobs:
           cd ${{github.workspace}}/iree && git submodule update --init --force --depth=1
           cd ${{github.workspace}}/snitch_cluster && git submodule update --init --force --depth=1
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: 3.11
-          cache: 'pip'
-          cache-dependency-path: |
+          enable-cache: true
+          cache-dependency-glob: |
             ./runtime/**/requirements.txt
             ./codegen/**/requirements.txt
             ./requirements.txt
             ./.git/modules/xdsl/HEAD
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.11
 
       - name: Install minimum required cmake and ninja
         uses: lukka/get-cmake@latest
@@ -95,7 +99,7 @@ jobs:
           # Clean disk space ahead of runs.
           rm -rf ${{github.workspace}}/build/*.o ${{github.workspace}}/build/*.a
           cd ${{github.workspace}}/build/runtime
-          # NsNet2 traces ought to fit here. 
+          # NsNet2 traces ought to fit here.
           ctest -R "NsNet2$" --extra-verbose -j$(nproc)
 
       - name: Upload traces
