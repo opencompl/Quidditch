@@ -403,10 +403,12 @@ void PadToTilingConfig::runOnOperation() {
   std::optional<IntegerAttr> attr = getConfigIntegerAttr(
       IREE::HAL::ExecutableTargetAttr::lookup(getOperation()), "compute_cores");
 
+  getOperation()->emitWarning()<< "\nvvv before padding vvv";
   // Pad every linalg op to a multiple of all applied tile sizes.
   for (linalg::LinalgOp &linalgOp : workList)
     if (failed(padToTileSize(linalgOp, attr)))
       return signalPassFailure();
+  getOperation()->emitWarning()<< "\nvvv after padding vvv";
 
   // First perform just the conversion of zero-pads to undef-pads.
   // These must run separately from later patterns that may erase pad ops
