@@ -1,0 +1,27 @@
+{
+    "main$async_dispatch_1_matmul_transpose_b_1x1200x400_f64" : {
+        "tile-sizes":[[0], [40], [100]],
+        "loop-order":[[2,0], [0,0], [1,0]],
+        "dual-buffer": true
+    },
+    "main$async_dispatch_0_matmul_transpose_b_1x400x161_f64" : {
+        "tile-sizes":[[0],[40],[0]],
+        "loop-order":[[2,0], [0,0], [1,0]],
+        "dual-buffer": false
+    },
+    "main$async_dispatch_7_matmul_transpose_b_1x600x400_f64" : {
+        "tile-sizes":[[0], [40], [100]],
+        "loop-order":[[2,0], [0,0], [1,0]],
+        "dual-buffer": true
+    },
+    "main$async_dispatch_8_matmul_transpose_b_1x600x600_f64" : {
+        "tile-sizes":[[0], [40], [100]],
+        "loop-order":[[2,0], [0,0], [1,0]],
+        "dual-buffer": true
+    },
+    "main$async_dispatch_9_matmul_transpose_b_1x161x600_f64" : {
+        "tile-sizes":[[0], [56], [100]],
+        "loop-order":[[2,0], [0,0], [1,0]],
+        "dual-buffer": true
+    }
+}

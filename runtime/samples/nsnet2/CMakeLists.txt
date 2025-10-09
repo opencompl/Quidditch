@@ -1,7 +1,7 @@
 
 iree_turbine(SRC NsNet2.py DST ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc DTYPE "f64")
-quidditch_module(SRC ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc DST nsnet2)
-quidditch_module(SRC ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc LLVM DST nsnet2_llvm)
+quidditch_module(SRC ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc DST nsnet2 FLAGS --iree-quidditch-import-tiles=${CMAKE_CURRENT_LIST_DIR}/manually-chosen-tiles.json)
+quidditch_module(SRC ${CMAKE_CURRENT_BINARY_DIR}/nsnet2.mlirbc LLVM DST nsnet2_llvm FLAGS --iree-quidditch-import-tiles=${CMAKE_CURRENT_LIST_DIR}/manually-chosen-tiles.json)
 
 add_library(nsnet2_util nsnet2_util.c)
 target_link_libraries(nsnet2_util

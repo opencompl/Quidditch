@@ -3,6 +3,7 @@
 
 include "mlir/Pass/PassBase.td"
 
+
 def LinkExecutablesPass : Pass<"quidditch-link-executables", "mlir::ModuleOp"> {
   let description = [{
     Combines all `hal.executable.variant`s of the same target into a single
@@ -28,6 +29,21 @@ def PadToTilingConfigPass : Pass<"quidditch-pad-to-tiling-config">;
 def ConfigureForSnitchPass
   : InterfacePass<"quidditch-configure-for-snitch",
       "mlir::FunctionOpInterface">;
+
+def ConfigureTiles : InterfacePass<"quidditch-configure-tiles", "mlir::FunctionOpInterface"> {
+  let summary = "Annotate linalg operations with tile sizes";
+  let description = [{
+    Within each iree dispatch, annotate the root linalg operation with a tiling scheme (tile sizes + loop interchange).
+    Caveat: only tiles linalg operations of type matmul_transpose_b (for now)
+    Set the importTiles option to the path to the json file containing the tiling scheme for each dispatch.
+  }];
+  let options = [
+    Option<"importTiles", "import-tiles", "std::string", /*default=*/"",
+           "Name of a JSON file specifying loop bounds and order for each root linalg operation.">,
+    Option<"tablePointer", "NeverPassAValueHere", "std::uintptr_t", /*default=*/"0",
+           "Avoids opening the input file multiple times. Never pass a value to this option via the command line.">,
+  ];
+}
 
 def TensorTilePass : InterfacePass<"quidditch-tensor-tile",
   "mlir::FunctionOpInterface"> {

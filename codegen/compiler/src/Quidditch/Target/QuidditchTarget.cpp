@@ -50,6 +50,9 @@
 #include "LibraryBuilder.h"
 #include "Passes.h"
 
+#include "TilingScheme.h"
+#include "llvm/Support/ErrorHandling.h"
+
 using namespace mlir;
 using namespace mlir::iree_compiler;
 using namespace quidditch::Snitch;
@@ -81,6 +84,9 @@ struct QuidditchTargetOptions {
   std::string xDSLOptPath;
   std::string toolChainRoot;
   bool assertCompiled = false;
+  std::string importTiles = ""; // added for Configure Tiles Pass
+  quidditch::TileInfoTbl tileInfo =
+      quidditch::TileInfoTbl(); // added for Configure Tiles Pass
   // TODO: This should actually be 112640 but DMA stack overflows. Ooopsie!
   unsigned l1MemoryBytes = 100000;
 
@@ -108,6 +114,11 @@ struct QuidditchTargetOptions {
         "iree-quidditch-toolchain-root", toolChainRoot, llvm::cl::cat(category),
         llvm::cl::desc("Path to the root directory of the Quidditch toolchain "
                        "(containing the toolchain file)"));
+    // added for Configure Tiles Pass
+    binder.opt<std::string>(
+        "iree-quidditch-import-tiles", importTiles, llvm::cl::cat(category),
+        llvm::cl::desc(
+            "Path to a JSON file from which we import tiling schemes"));
     binder.opt<bool>(
         "iree-quidditch-assert-compiled", assertCompiled,
         llvm::cl::cat(category),
@@ -173,7 +184,20 @@ public:
     }
     modulePassManager.addPass(createMaterializeUserConfigsPass());
     FunctionLikeNest funcPassManager(modulePassManager);
-    funcPassManager.addPass(quidditch::createConfigureForSnitchPass);
+
+    // import any manually supplied tile sizes
+    if (targetOptions.importTiles != "") {
+      std::string errs;
+      quidditch::fillTileInfoTable(&targetOptions.tileInfo,
+                                   targetOptions.importTiles, errs);
+    }
+
+    // automatically tile the dispatches
+    funcPassManager.addPass([&] {
+      auto thePass = quidditch::createConfigureTiles(
+          {targetOptions.importTiles, (std::uintptr_t)&targetOptions.tileInfo});
+      return thePass;
+    });
   }
 
   void buildTranslationPassPipeline(IREE::HAL::ExecutableTargetAttr targetAttr,

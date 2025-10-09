@@ -20,15 +20,18 @@ iree_cc_library(
         HDRS
         "Passes.h"
         "Passes.h.inc"
+        "TilingScheme.h"
         SRCS
         "ConvertToLLVM.cpp"
         "ConfigureForSnitch.cpp"
+        "ConfigureTiles.cpp"
         "DisableQuidditchVariant.cpp"
         "LinkExecutables.cpp"
         "PadToTilingConfig.cpp"
         "ReluToMax.cpp"
         "RemoveTrivialLoops.cpp"
         "TensorTile.cpp"
+        "TilingScheme.cpp"
         DEPS
         ::PassesIncGen
         Quidditch::Conversion::ConvertSnitchToLLVM
