@@ -2,20 +2,24 @@ cmake_minimum_required(VERSION 3.21)
 project(Quidditch C CXX)
 
 set(QUIDDITCH_TOOLCHAIN_FILE "" CACHE FILEPATH "Path to the quidditch toolchain's toolchain file")
-set(OVERRIDE_VENV OFF CACHE BOOL "")
 cmake_path(REMOVE_FILENAME QUIDDITCH_TOOLCHAIN_FILE OUTPUT_VARIABLE QUIDDITCH_TOOLCHAIN_ROOT)
 
-if (NOT DEFINED ENV{VIRTUAL_ENV} AND NOT ${OVERRIDE_VENV})
-  message(FATAL_ERROR [[
-  Please use a virtual environment as this cmake script will call pip install.
-  Reconfigure with -DOVERRIDE_VENV=ON if this is a false positive or you don't
-  care.
-]])
-  return()
-endif ()
+# TODO: allow influencing this from the commandline invocation during configuration
+set(QUIDDITCH_VENV_DIR "${CMAKE_CURRENT_SOURCE_DIR}/venv")
 
-set(Python3_FIND_VIRTUALENV "FIRST")
-find_package(Python3 REQUIRED)
+find_package (Python3 COMPONENTS Interpreter)
+execute_process (COMMAND "${Python3_EXECUTABLE}" -m venv "${QUIDDITCH_VENV_DIR}")
+
+# based on: https://tinyurl.com/4rep5yd4
+# update the environment with VIRTUAL_ENV variable (mimic the activate script)
+set (ENV{VIRTUAL_ENV} "${QUIDDITCH_VENV_DIR}")
+# change the context of the search
+set (Python3_FIND_VIRTUALENV FIRST)
+# unset Python3_EXECUTABLE because it is also an input variable (see documentation, Artifacts Specification section)
+unset (Python3_EXECUTABLE)
+# launch a new search
+find_package (Python3 COMPONENTS Interpreter Development)
+
 execute_process(
     COMMAND "${Python3_EXECUTABLE}" -m pip install -r ${CMAKE_CURRENT_LIST_DIR}/requirements_frozen.txt
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR} COMMAND_ERROR_IS_FATAL ANY)
