@@ -55,11 +55,9 @@ void LowerL1Allocations::runOnOperation() {
     builder.setInsertionPoint(allocOp);
     MemRefType memRefType = allocOp.getType();
     // Note: This assumes bitWidth == alignment == size.
+    // Since we use a scratchpad, align to size of element in bytes.
     uint64_t bitWidth = memRefType.getElementTypeBitWidth();
-    if (std::optional<uint64_t> alignment = allocOp.getAlignment())
-      offset = llvm::alignTo(offset, *alignment);
-    else
-      offset = llvm::alignTo(offset, llvm::divideCeil(bitWidth, 8));
+    offset = llvm::alignTo(offset, llvm::divideCeil(bitWidth, 8));
 
     auto byteShift =
         builder.create<arith::ConstantIndexOp>(allocOp.getLoc(), offset);
