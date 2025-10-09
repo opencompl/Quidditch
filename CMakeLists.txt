@@ -17,10 +17,8 @@ endif ()
 set(Python3_FIND_VIRTUALENV "FIRST")
 find_package(Python3 REQUIRED)
 execute_process(
-    COMMAND uv pip install -r ${CMAKE_CURRENT_LIST_DIR}/requirements.txt --exclude-newer 2024-09-01
-    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-    COMMAND_ERROR_IS_FATAL ANY
-)
+    COMMAND "${Python3_EXECUTABLE}" -m pip install -r ${CMAKE_CURRENT_LIST_DIR}/requirements_frozen.txt
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR} COMMAND_ERROR_IS_FATAL ANY)
 
 # Reconfigure if any of the 'requirements.txt' files changed or we update the xDSL commit.
 # This then reruns 'pip install'.
