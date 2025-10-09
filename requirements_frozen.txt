@@ -45,4 +45,4 @@ torch==2.3.0
 triton==2.3.0
 typing-extensions==4.12.2
 tzdata==2024.1
--e file:///home/al666/Developer/opencompl/Quidditch/xdsl
+-e xdsl
