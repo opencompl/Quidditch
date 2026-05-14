@@ -43,10 +43,8 @@ source ./venv/bin/activate
 
 mkdir build && cd build
 cmake .. -GNinja \
-  # Optional but highly recommended \
   -DCMAKE_C_COMPILER=clang \
   -DCMAKE_CXX_COMPILER=clang++ \
-  # Optional for improved caching, requires ccache to be installed. \
   # -DCMAKE_C_COMPILER_LAUNCHER=ccache \
   # -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
   -DQUIDDITCH_TOOLCHAIN_FILE=../toolchain/ToolchainFile.cmake
@@ -66,6 +64,36 @@ independently.
 > [!NOTE]
 > It should be possible to decouple the compilation infrastructure from the runtime, letting users compile the neural networks on their local machines, to then execute it on Linux.
 > Everything to do with Verilator is only supported on Linux, so that part cannot be made platform-independent, but the `runtime/toolchain/Dockerfile` can be massaged to exclude everything Verilator-related, to build MLIR+IREE+Quidditch, and be run as a script to produce a compiler that emits everything necessary to just run it on a Linux machine.
+
+## Executing and Profiling without Snitch hardware
+
+*For this example, we will use the built executable located at `build/runtime/samples/nsnet/NsNet2`.*
+*All commands are executed from the root `quidditch` directory*
+
+The compilation process produces a Snitch executable, which can only be run on Snitch hardware.
+The Snitch executable can be simulated on the host using the Snitch toolchain's Verilator simulator.
+
+```shell
+export TARGET_EXE=build/runtime/samples/nsnet/NsNet2
+toolchain/bin/snitch_cluster.vlt $TARGET_EXE
+```
+
+The Verilator execution emits `dasm` traces in a `logs` folder (one will be created if its does not exist).
+They will be labeled `trace_hart_0000000X.dasm` from `X` = 0 to 8.
+`X` = 8 is the DMA core, whereas cores 0 to 7 are the compute cores.
+
+Each `dasm` trace should then be converted to human-readable assembly, which can then be analyzed for metrics
+
+```shell
+cat logs/trace_hart_00000001.dasm | toolchain/bin/spike-dasm > logs/trace_hart_00000001.asm
+python3 snitch_cluster/util/trace/gen_trace.py logs/trace_hart_00000001.asm -d hart_1_perf.json > metrics_hart_1.txt
+```
+
+A [Perfetto](http://ui.perfetto.dev) `events.json` trace can then be generated using the helper script, taking the hart_X_perf.json and metrics_hart_X.txt as input.
+
+```shell
+python3 runtime/util/snitch_trace_to_perfetto.py -i hart_1_perf.json --trace logs/trace_hart_00000001.dasm --elf $TARGET_EXE --addr2line toolchain/bin/llvm-addr2line -o events.json
+```
 
 ## Compiling Neural Networks
 
